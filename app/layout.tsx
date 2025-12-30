@@ -18,8 +18,8 @@ const montserrat = Montserrat({
 });
 
 export const metadata: Metadata = {
-  title: "Regrind",
-  description: "Regrind",
+  title: "True Wood EMS",
+  description: "True Wood EMS",
 };
 
 export default function RootLayout({
