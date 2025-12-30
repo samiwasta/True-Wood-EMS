@@ -6,16 +6,32 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Search, Plus } from 'lucide-react'
 import { useDebounce } from '@/lib/hooks/useDebounce'
+import { useSearchParams, useRouter } from 'next/navigation'
+import { useEffect } from 'react'
 
-export default function EmployeesPage() {
+import { Suspense } from 'react'
+
+function EmployeesPageInner() {
   const [searchQuery, setSearchQuery] = useState('')
   const debouncedSearch = useDebounce(searchQuery, 300)
   const addEmployeeTriggerRef = useRef<() => void>(null)
+  const searchParams = useSearchParams()
+  const router = useRouter()
+
+  useEffect(() => {
+    if (searchParams.get('add') === 'true' && addEmployeeTriggerRef.current) {
+      addEmployeeTriggerRef.current()
+      // Remove the param after triggering to avoid reopening on reload
+      const params = new URLSearchParams(searchParams.toString())
+      params.delete('add')
+      router.replace(`/employees${params.toString() ? `?${params.toString()}` : ''}`)
+    }
+  }, [searchParams, router])
 
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between gap-4">
-      <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-2">
           <h1 className="text-3xl font-bold text-gray-900">Employees</h1>
           <p className="text-gray-500">Manage employees and their details</p>
         </div>
@@ -43,10 +59,18 @@ export default function EmployeesPage() {
           </Button>
         </div>
       </div>
-      <EmployeesTable 
-        searchQuery={debouncedSearch} 
+      <EmployeesTable
+        searchQuery={debouncedSearch}
         onAddEmployeeTriggerRef={addEmployeeTriggerRef}
       />
     </div>
+  )
+}
+
+export default function EmployeesPage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <EmployeesPageInner />
+    </Suspense>
   )
 }

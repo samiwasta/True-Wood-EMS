@@ -1,6 +1,6 @@
 'use client'
 
-import { useUpcomingLeaves } from '@/lib/hooks/useUpcomingLeaves'
+import { useUpcomingLeaves, UpcomingLeave } from '@/lib/hooks/useUpcomingLeaves'
 import { Skeleton } from '@/components/ui/skeleton'
 import { CalendarDays } from 'lucide-react'
 
@@ -18,7 +18,7 @@ export function UpcomingLeaves() {
         <CalendarDays className="h-5 w-5 text-gray-600" />
         <h2 className="text-lg font-semibold text-gray-900">Upcoming Leaves</h2>
       </div>
-      
+
       {loading ? (
         <div className="space-y-3">
           {[1, 2, 3].map((i) => (
@@ -37,7 +37,7 @@ export function UpcomingLeaves() {
         </div>
       ) : (
         <div className="space-y-3">
-          {leaves.map((leave: any, index: number) => (
+          {leaves.map((leave: UpcomingLeave, index: number) => (
             <div key={leave.id || index} className="flex items-center gap-3 p-3 hover:bg-gray-50 rounded-lg transition-colors border-l-4 border-orange-500">
               <div className="flex-shrink-0">
                 <div className="h-12 w-12 rounded-lg bg-orange-100 flex items-center justify-center">

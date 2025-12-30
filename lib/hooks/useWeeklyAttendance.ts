@@ -1,8 +1,13 @@
 import { useState, useEffect } from 'react'
 import { AttendanceService } from '@/lib/services/attendance.service'
 
+export interface WeeklyAttendance {
+  date: string
+  status: string
+}
+
 export function useWeeklyAttendance() {
-  const [attendance, setAttendance] = useState<any[]>([])
+  const [attendance, setAttendance] = useState<WeeklyAttendance[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<Error | null>(null)
 

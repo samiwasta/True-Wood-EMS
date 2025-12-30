@@ -15,13 +15,10 @@ export function UpcomingHolidays() {
   }
 
   const formatDateRange = (startDateString: string, endDateString: string) => {
-    const start = new Date(startDateString)
-    const end = new Date(endDateString)
-    
     if (startDateString === endDateString) {
       return formatDate(startDateString)
     }
-    
+
     return `${formatDate(startDateString)} - ${formatDate(endDateString)}`
   }
 
@@ -47,7 +44,7 @@ export function UpcomingHolidays() {
         <CalendarDays className="h-5 w-5 text-[#23887C]" />
         <h2 className="text-lg font-semibold text-gray-900">Upcoming Holidays</h2>
       </div>
-      
+
       {loading ? (
         <div className="space-y-3">
           {[1, 2, 3].map((i) => (
@@ -67,8 +64,8 @@ export function UpcomingHolidays() {
       ) : (
         <div className="space-y-3">
           {upcomingHolidays.map((holiday: Holiday, index: number) => (
-            <div 
-              key={holiday.id || index} 
+            <div
+              key={holiday.id || index}
               className="flex items-center gap-3 p-3 hover:bg-gray-50 rounded-lg transition-colors border-l-4 border-[#23887C]"
             >
               <div className="flex-shrink-0">

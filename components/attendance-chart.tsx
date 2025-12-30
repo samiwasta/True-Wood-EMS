@@ -4,29 +4,36 @@ import { useWeeklyAttendance } from '@/lib/hooks/useWeeklyAttendance'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Calendar } from 'lucide-react'
 import { useMemo } from 'react'
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer
+} from 'recharts'
 
 interface AttendanceRecord {
   date: string
-  status: 'present' | 'absent' | 'leave'
+  status: string
 }
 
 export function AttendanceChart() {
   const { attendance, loading } = useWeeklyAttendance()
 
   const chartData = useMemo(() => {
-    const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
     const today = new Date()
-    const currentDay = today.getDay()
-    
-    const daysFromMonday = currentDay === 0 ? 6 : currentDay - 1
-    const monday = new Date(today)
-    monday.setDate(today.getDate() - daysFromMonday)
-    
-    const last7Days = Array.from({ length: 7 }, (_, i) => {
-      const date = new Date(monday)
-      date.setDate(monday.getDate() + i)
+
+    // Generate the last 7 days (rolling)
+    const rolling7Days = Array.from({ length: 7 }, (_, i) => {
+      const date = new Date(today)
+      date.setDate(today.getDate() - (6 - i))
+      const dayIndex = date.getDay()
       return {
-        day: days[i],
+        day: days[dayIndex],
         date: date.toISOString().split('T')[0],
         present: 0,
         absent: 0,
@@ -35,7 +42,7 @@ export function AttendanceChart() {
     })
 
     attendance.forEach((record: AttendanceRecord) => {
-      const dayData = last7Days.find(d => d.date === record.date)
+      const dayData = rolling7Days.find(d => d.date === record.date)
       if (dayData) {
         if (record.status === 'present') {
           dayData.present++
@@ -47,71 +54,85 @@ export function AttendanceChart() {
       }
     })
 
-    return last7Days
+    return rolling7Days
   }, [attendance])
 
-  const maxValue = Math.max(...chartData.map(d => d.present + d.absent + d.leave), 1)
-
   return (
-    <div className="bg-white rounded-lg border border-gray-200 p-6">
+    <div className="bg-white rounded-lg border border-gray-200 p-4 h-auto flex flex-col">
       <div className="flex items-center gap-2 mb-4">
-        <Calendar className="h-5 w-5 text-gray-600" />
+        <Calendar className="h-5 w-5 text-[#23887C]" />
         <h2 className="text-lg font-semibold text-gray-900">Weekly Attendance</h2>
       </div>
-      
+
       {loading ? (
-        <div className="space-y-3">
-          <Skeleton className="h-48 w-full" />
+        <div className="h-[180px] flex items-center">
+          <Skeleton className="h-full w-full rounded-lg" />
         </div>
       ) : (
-        <div className="space-y-4">
-          <div className="flex items-end justify-between gap-2 h-48">
-            {chartData.map((day, index) => {
-              const presentHeight = maxValue > 0 ? (day.present / maxValue) * 100 : 0
-              const absentHeight = maxValue > 0 ? (day.absent / maxValue) * 100 : 0
-              const leaveHeight = maxValue > 0 ? (day.leave / maxValue) * 100 : 0
-              
-              return (
-                <div key={index} className="flex-1 flex flex-col items-center gap-1">
-                  <div className="w-full h-full flex flex-col justify-end gap-0.5">
-                    <div
-                      className="w-full bg-green-500 rounded-t transition-all"
-                      style={{ height: `${presentHeight}%` }}
-                      title={`Present: ${day.present}`}
-                    />
-                    <div
-                      className="w-full bg-red-500 rounded-t transition-all"
-                      style={{ height: `${absentHeight}%` }}
-                      title={`Absent: ${day.absent}`}
-                    />
-                    <div
-                      className="w-full bg-orange-500 rounded-t transition-all"
-                      style={{ height: `${leaveHeight}%` }}
-                      title={`Leave: ${day.leave}`}
-                    />
-                  </div>
-                  <span className="text-xs text-gray-600 mt-2">{day.day}</span>
-                </div>
-              )
-            })}
-          </div>
-          <div className="flex items-center justify-center gap-4 pt-2 border-t">
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 bg-green-500 rounded"></div>
-              <span className="text-xs text-gray-600">Present</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 bg-red-500 rounded"></div>
-              <span className="text-xs text-gray-600">Absent</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 bg-orange-500 rounded"></div>
-              <span className="text-xs text-gray-600">Leave</span>
-            </div>
-          </div>
+        <div className="h-[250px] w-full">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart
+              data={chartData}
+              margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
+            >
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
+              <XAxis
+                dataKey="day"
+                axisLine={false}
+                tickLine={false}
+                tick={{ fill: '#6b7280', fontSize: 12 }}
+                dy={10}
+              />
+              <YAxis
+                axisLine={false}
+                tickLine={false}
+                tick={{ fill: '#6b7280', fontSize: 12 }}
+              />
+              <Tooltip
+                cursor={{ stroke: '#f0f0f0', strokeWidth: 2 }}
+                contentStyle={{
+                  borderRadius: '12px',
+                  border: 'none',
+                  boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)'
+                }}
+              />
+              <Legend
+                verticalAlign="bottom"
+                height={36}
+                iconType="circle"
+                wrapperStyle={{ paddingTop: '20px' }}
+              />
+              <Line
+                type="monotone"
+                dataKey="present"
+                name="Present"
+                stroke="#22c55e"
+                strokeWidth={3}
+                dot={{ r: 4, fill: '#22c55e', strokeWidth: 2, stroke: '#fff' }}
+                activeDot={{ r: 6, strokeWidth: 0 }}
+              />
+              <Line
+                type="monotone"
+                dataKey="absent"
+                name="Absent"
+                stroke="#ef4444"
+                strokeWidth={3}
+                dot={{ r: 4, fill: '#ef4444', strokeWidth: 2, stroke: '#fff' }}
+                activeDot={{ r: 6, strokeWidth: 0 }}
+              />
+              <Line
+                type="monotone"
+                dataKey="leave"
+                name="Leave"
+                stroke="#f97316"
+                strokeWidth={3}
+                dot={{ r: 4, fill: '#f97316', strokeWidth: 2, stroke: '#fff' }}
+                activeDot={{ r: 6, strokeWidth: 0 }}
+              />
+            </LineChart>
+          </ResponsiveContainer>
         </div>
       )}
     </div>
   )
 }
-

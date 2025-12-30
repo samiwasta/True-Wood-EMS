@@ -1,37 +1,39 @@
 'use client'
 
-import { Plus, UserPlus, FileText, Download, Settings } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { Users, FileText, Download, Settings } from 'lucide-react'
+import { useRouter } from 'next/navigation'
 
 export function QuickActions() {
+  const router = useRouter()
+
   const actions = [
     {
-      icon: UserPlus,
+      icon: Users,
       label: 'Add Employee',
       color: '#23887C',
       bgColor: '#E6F1EF',
-      onClick: () => console.log('Add Employee'),
+      onClick: () => router.push('/employees?add=true'),
     },
     {
       icon: FileText,
       label: 'Mark Attendance',
       color: '#3B82F6',
       bgColor: '#EFF6FF',
-      onClick: () => console.log('Mark Attendance'),
+      onClick: () => router.push('/attendance'),
     },
     {
       icon: Download,
       label: 'Export Data',
       color: '#F59E0B',
       bgColor: '#FFFBEB',
-      onClick: () => console.log('Export Data'),
+      onClick: () => router.push('/reports'),
     },
     {
       icon: Settings,
       label: 'Settings',
       color: '#6B7280',
       bgColor: '#F3F4F6',
-      onClick: () => console.log('Settings'),
+      onClick: () => router.push('/settings'),
     },
   ]
 

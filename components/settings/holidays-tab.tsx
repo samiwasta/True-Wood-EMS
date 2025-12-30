@@ -21,15 +21,15 @@ import { format } from 'date-fns'
 
 export function HolidaysTab() {
   const { holidays, loading, createHoliday, updateHoliday, deleteHoliday } = useHolidays()
-  
+
   // Get current year
   const currentYear = new Date().getFullYear()
-  
+
   // Dialog state
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
-  
+
   // Form state
   const [holidayName, setHolidayName] = useState('')
   const [startDate, setStartDate] = useState<Date | undefined>(undefined)
@@ -64,22 +64,19 @@ export function HolidaysTab() {
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString)
-    return date.toLocaleDateString('en-US', { 
+    return date.toLocaleDateString('en-US', {
       weekday: 'short',
-      year: 'numeric', 
-      month: 'short', 
-      day: 'numeric' 
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
     })
   }
 
   const formatDateRange = (startDateString: string, endDateString: string) => {
-    const start = new Date(startDateString)
-    const end = new Date(endDateString)
-    
     if (startDateString === endDateString) {
       return formatDate(startDateString)
     }
-    
+
     return `${formatDate(startDateString)} - ${formatDate(endDateString)}`
   }
 
@@ -97,7 +94,7 @@ export function HolidaysTab() {
 
   const handleAddSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    
+
     if (!holidayName.trim() || !startDate || !endDate) {
       return
     }
@@ -107,7 +104,7 @@ export function HolidaysTab() {
       const startDateStr = formatDateForDB(startDate)
       const endDateStr = formatDateForDB(endDate)
       await createHoliday(holidayName, startDateStr, endDateStr)
-      
+
       // Reset form and close dialog
       setHolidayName('')
       setStartDate(undefined)
@@ -124,7 +121,7 @@ export function HolidaysTab() {
 
   const handleEditSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    
+
     if (!holidayName.trim() || !startDate || !endDate || !editingHoliday) {
       return
     }
@@ -134,7 +131,7 @@ export function HolidaysTab() {
       const startDateStr = formatDateForDB(startDate)
       const endDateStr = formatDateForDB(endDate)
       await updateHoliday(editingHoliday.id, holidayName, startDateStr, endDateStr)
-      
+
       // Reset form and close dialog
       setHolidayName('')
       setStartDate(undefined)
@@ -156,7 +153,7 @@ export function HolidaysTab() {
     setIsSubmitting(true)
     try {
       await deleteHoliday(deletingHoliday.id)
-      
+
       // Reset and close dialog
       setDeletingHoliday(null)
       setIsDeleteDialogOpen(false)
@@ -240,8 +237,8 @@ export function HolidaysTab() {
             </DialogHeader>
             <form onSubmit={handleAddSubmit} className="space-y-4">
               <div className="space-y-2">
-                <label 
-                  htmlFor="holiday-name" 
+                <label
+                  htmlFor="holiday-name"
                   className="text-sm font-medium text-gray-700 block"
                 >
                   Holiday Name <span className="text-red-500">*</span>
@@ -259,7 +256,7 @@ export function HolidaysTab() {
                 />
               </div>
               <div className="space-y-2">
-                <label 
+                <label
                   htmlFor="start-date-input"
                   className="text-sm font-medium text-gray-700 block"
                 >
@@ -297,7 +294,7 @@ export function HolidaysTab() {
                 </div>
               </div>
               <div className="space-y-2">
-                <label 
+                <label
                   htmlFor="end-date-input"
                   className="text-sm font-medium text-gray-700 block"
                 >
@@ -370,7 +367,7 @@ export function HolidaysTab() {
           </DialogContent>
         </Dialog>
       </div>
-      
+
       {loading ? (
         <div className="space-y-3">
           {[1, 2, 3, 4].map((i) => (
@@ -388,21 +385,18 @@ export function HolidaysTab() {
           {holidays.map((holiday: Holiday) => (
             <div
               key={holiday.id}
-              className={`flex items-center justify-between p-4 bg-white border rounded-lg hover:shadow-sm transition-all duration-200 group ${
-                isUpcoming(holiday.start_date) 
-                  ? 'border-blue-300 bg-blue-50/50' 
+              className={`flex items-center justify-between p-4 bg-white border rounded-lg hover:shadow-sm transition-all duration-200 group ${isUpcoming(holiday.start_date)
+                  ? 'border-blue-300 bg-blue-50/50'
                   : 'border-gray-200'
-              }`}
+                }`}
             >
               <div className="flex items-start gap-3 flex-1">
-                <div className={`p-2 rounded-lg transition-colors ${
-                  isUpcoming(holiday.start_date)
+                <div className={`p-2 rounded-lg transition-colors ${isUpcoming(holiday.start_date)
                     ? 'bg-blue-100 group-hover:bg-blue-200'
                     : 'bg-gray-100'
-                }`}>
-                  <CalendarDays className={`h-4 w-4 ${
-                    isUpcoming(holiday.start_date) ? 'text-blue-600' : 'text-gray-400'
-                  }`} />
+                  }`}>
+                  <CalendarDays className={`h-4 w-4 ${isUpcoming(holiday.start_date) ? 'text-blue-600' : 'text-gray-400'
+                    }`} />
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="font-semibold text-gray-900">{holiday.name || holiday.title}</p>
@@ -454,8 +448,8 @@ export function HolidaysTab() {
           </DialogHeader>
           <form onSubmit={handleEditSubmit} className="space-y-4">
             <div className="space-y-2">
-              <label 
-                htmlFor="edit-holiday-name" 
+              <label
+                htmlFor="edit-holiday-name"
                 className="text-sm font-medium text-gray-700 block"
               >
                 Holiday Name <span className="text-red-500">*</span>
@@ -473,7 +467,7 @@ export function HolidaysTab() {
               />
             </div>
             <div className="space-y-2">
-              <label 
+              <label
                 htmlFor="edit-start-date-input"
                 className="text-sm font-medium text-gray-700 block"
               >
@@ -511,7 +505,7 @@ export function HolidaysTab() {
               </div>
             </div>
             <div className="space-y-2">
-              <label 
+              <label
                 htmlFor="edit-end-date-input"
                 className="text-sm font-medium text-gray-700 block"
               >

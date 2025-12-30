@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
 import { EmployeeService } from '@/lib/services/employee.service'
+import { Employee } from '@/lib/hooks/useEmployees'
 
 export function useRecentEmployees(limit: number = 5) {
-  const [employees, setEmployees] = useState<any[]>([])
+  const [employees, setEmployees] = useState<Employee[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<Error | null>(null)
 

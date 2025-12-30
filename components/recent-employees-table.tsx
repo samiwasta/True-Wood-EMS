@@ -3,6 +3,7 @@
 import { useRecentEmployees } from '@/lib/hooks/useRecentEmployees'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Users } from 'lucide-react'
+import { Employee } from '@/lib/hooks/useEmployees'
 
 export function RecentEmployeesTable() {
   const { employees, loading } = useRecentEmployees(5)
@@ -13,7 +14,7 @@ export function RecentEmployeesTable() {
         <Users className="h-5 w-5 text-gray-600" />
         <h2 className="text-lg font-semibold text-gray-900">Recent Employees</h2>
       </div>
-      
+
       {loading ? (
         <div className="space-y-3">
           {[1, 2, 3, 4, 5].map((i) => (
@@ -32,24 +33,23 @@ export function RecentEmployeesTable() {
         </div>
       ) : (
         <div className="space-y-3">
-          {employees.map((employee: any, index: number) => (
+          {employees.map((employee: Employee, index: number) => (
             <div key={employee.id || index} className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded-lg transition-colors">
               <div className="h-10 w-10 rounded-full bg-[#23887C] flex items-center justify-center text-white font-semibold">
                 {employee.name?.charAt(0)?.toUpperCase() || 'E'}
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-gray-900 truncate">
-                  {employee.name || employee.full_name || 'Unknown'}
+                  {employee.name || 'Unknown'}
                 </p>
                 <p className="text-xs text-gray-500 truncate">
-                  {employee.department || employee.role || 'No department'}
+                  {employee.department?.name || 'No department'}
                 </p>
               </div>
-              <span className={`text-xs px-2 py-1 rounded-full ${
-                employee.status === 'active' 
-                  ? 'bg-green-100 text-green-700' 
-                  : 'bg-gray-100 text-gray-700'
-              }`}>
+              <span className={`text-xs px-2 py-1 rounded-full ${employee.status === 'active'
+                ? 'bg-green-100 text-green-700'
+                : 'bg-gray-100 text-gray-700'
+                }`}>
                 {employee.status || 'active'}
               </span>
             </div>

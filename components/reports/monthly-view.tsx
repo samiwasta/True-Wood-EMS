@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import { useEmployees, Employee } from '@/lib/hooks/useEmployees'
 import { useLeaveTypes } from '@/lib/hooks/useLeaveTypes'
 import { useWorkSites } from '@/lib/hooks/useWorkSites'
@@ -26,7 +26,7 @@ import {
   Users,
   Calendar,
 } from 'lucide-react'
-import { format, eachDayOfInterval, getDay, getDate } from 'date-fns'
+import { format, eachDayOfInterval, getDate } from 'date-fns'
 import { cn } from '@/lib/utils'
 import {
   getDayName,
@@ -58,7 +58,13 @@ interface AttendanceRecord {
   status: 'present' | 'absent' | 'leave'
   leave_type_id?: string | null
   work_site_id?: string | null
-  employees?: any
+  employees?: {
+    id: string
+    employee_id: string
+    name: string
+    category: { id: string; name: string }[]
+    department: { id: string; name: string }[]
+  }[]
 }
 
 const getCurrentWorkingMonth = () => {
@@ -97,7 +103,7 @@ const getWorkingMonthDates = (startMonth: number, startYear: number) => {
   }
 }
 
-const getMonthCombinationLabel = (startMonth: number, startYear: number) => {
+const getMonthCombinationLabel = (startMonth: number) => {
   const monthNames = [
     'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
     'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
@@ -105,7 +111,6 @@ const getMonthCombinationLabel = (startMonth: number, startYear: number) => {
 
   const startMonthName = monthNames[startMonth]
   const endMonth = startMonth === 11 ? 0 : startMonth + 1
-  const endYear = startMonth === 11 ? startYear + 1 : startYear
   const endMonthName = monthNames[endMonth]
 
   return `${startMonthName} - ${endMonthName}`
@@ -124,7 +129,6 @@ export function MonthlyView() {
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([])
   const [loading, setLoading] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
-  const [statusFilter, setStatusFilter] = useState<string>('all')
   const [hoveredRow, setHoveredRow] = useState<string | null>(null)
 
   const workingMonth = useMemo(() => {
@@ -231,12 +235,12 @@ export function MonthlyView() {
     return map
   }, [attendanceRecords])
 
-  const getDayStatus = (date: Date) => {
+  const getDayStatus = useCallback((date: Date) => {
     const holiday = isHoliday(date, holidays)
     if (holiday) return { type: 'holiday' as const, name: holiday.name || 'Holiday' }
     if (isWeeklyOff(date, weeklyOff)) return { type: 'weekoff' as const, name: 'Week Off' }
     return null
-  }
+  }, [holidays, weeklyOff])
 
   // Calculate per-employee statistics
   const employeeStatistics = useMemo(() => {
@@ -282,43 +286,6 @@ export function MonthlyView() {
     return stats
   }, [employees, workingMonth.dates, attendanceMap, getDayStatus])
 
-  // Calculate statistics
-  const statistics = useMemo(() => {
-    const totalEmployees = employees.length
-    let totalPresent = 0
-    let totalAbsent = 0
-    let totalLeave = 0
-    const totalWorkingDays = workingMonth.dates.filter(date => {
-      const dayStatus = getDayStatus(date)
-      return !dayStatus
-    }).length
-
-    employees.forEach(employee => {
-      workingMonth.dates.forEach(date => {
-        const dayStatus = getDayStatus(date)
-        if (dayStatus) return // Skip holidays and weekoffs
-
-        const dateStr = format(date, 'yyyy-MM-dd')
-        const record = attendanceMap[employee.id]?.[dateStr]
-
-        if (record?.status === 'present') totalPresent++
-        else if (record?.status === 'absent') totalAbsent++
-        else if (record?.status === 'leave') totalLeave++
-      })
-    })
-
-    const totalRecords = totalPresent + totalAbsent + totalLeave
-    const attendancePercentage = totalRecords > 0 ? (totalPresent / totalRecords) * 100 : 0
-
-    return {
-      totalEmployees,
-      totalPresent,
-      totalAbsent,
-      totalLeave,
-      totalWorkingDays,
-      attendancePercentage: attendancePercentage.toFixed(1)
-    }
-  }, [employees, workingMonth.dates, attendanceMap])
 
   const monthCombinations = useMemo(() => {
     const combinations: Array<{ startMonth: number; startYear: number; label: string }> = []
@@ -329,7 +296,7 @@ export function MonthlyView() {
         combinations.push({
           startMonth: month,
           startYear: year,
-          label: getMonthCombinationLabel(month, year),
+          label: getMonthCombinationLabel(month),
         })
       }
     }
@@ -348,7 +315,7 @@ export function MonthlyView() {
 
   // Export to Excel
   const exportToExcel = () => {
-    const exportData: any[] = []
+    const exportData: (string | number)[][] = []
 
     // 1. Metadata Row
     exportData.push([`Attendance Report: ${format(workingMonth.start, 'dd MMM yyyy')} - ${format(workingMonth.end, 'dd MMM yyyy')}`])
@@ -509,8 +476,8 @@ export function MonthlyView() {
     workSites.forEach(ws => headers.push(ws.short_hand || getWorkSiteInitials(ws.name || 'Work Site')))
 
     // Prepare Data
-    const tableData: any[] = []
-    groupedEmployees.forEach(({ category, employees: categoryEmployees }) => {
+    const tableData: (string | number | { content: string | number; styles: Record<string, unknown> })[][] = []
+    groupedEmployees.forEach(({ employees: categoryEmployees }) => {
       // Category Header Row - roughly simulated by pushing a row with category name
       // autoTable doesn't support "group headers" elegantly in the body array simply, 
       // but we'll stick to listing employees. 
@@ -518,7 +485,7 @@ export function MonthlyView() {
 
       categoryEmployees.forEach(employee => {
         const stats = employeeStatistics[employee.id]
-        const row: any[] = [
+        const row: (string | number | { content: string | number; styles: Record<string, unknown> })[] = [
           employee.employee_id || '-',
           employee.name,
         ]
@@ -587,11 +554,11 @@ export function MonthlyView() {
     })
 
     // Add Legend
-    const finalY = (doc as any).lastAutoTable?.finalY || 40
+    const finalY = (doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY || 40
 
     // Prepare Legend Data
     const legendHeaders = ['Code', 'Description']
-    const legendData: any[] = []
+    const legendData: (string | number)[][] = []
 
     // Statuses
     legendData.push(['P', 'Present'])
@@ -624,7 +591,7 @@ export function MonthlyView() {
       },
       didParseCell: (data) => {
         if (data.section === 'body' && data.column.index === 0) {
-          const code = (data.row.raw as any)[0]
+          const code = (data.row.raw as (string | number)[])[0]
           let rgb: [number, number, number] | null = null
 
           if (code === 'P') rgb = getColorRGB('bg-green-100')

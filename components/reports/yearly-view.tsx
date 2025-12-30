@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import { useEmployees, Employee } from '@/lib/hooks/useEmployees'
 import { useLeaveTypes } from '@/lib/hooks/useLeaveTypes'
 import { useWorkSites } from '@/lib/hooks/useWorkSites'
@@ -21,8 +21,6 @@ import {
     FileSpreadsheet,
     FileText,
     Search,
-    Users,
-    Calendar,
 } from 'lucide-react'
 import { format, eachDayOfInterval } from 'date-fns'
 import { cn } from '@/lib/utils'
@@ -53,7 +51,13 @@ interface AttendanceRecord {
     status: 'present' | 'absent' | 'leave'
     leave_type_id?: string | null
     work_site_id?: string | null
-    employees?: any
+    employees?: {
+        id: string
+        employee_id: string
+        name: string
+        category: { id: string; name: string }[]
+        department: { id: string; name: string }[]
+    }[]
 }
 
 export function YearlyView() {
@@ -88,7 +92,7 @@ export function YearlyView() {
             try {
                 const startDateStr = format(workingYearDates.start, 'yyyy-MM-dd')
                 const endDateStr = format(workingYearDates.end, 'yyyy-MM-dd')
-                const records = await AttendanceService.getAttendanceByDateRange(startDateStr, endDateStr)
+                const records = await AttendanceService.getAttendanceByDateRange(startDateStr, endDateStr) as unknown as AttendanceRecord[]
                 setAttendanceRecords(records)
             } catch (error) {
                 console.error('Error fetching attendance:', error)
@@ -154,12 +158,12 @@ export function YearlyView() {
         return map
     }, [attendanceRecords])
 
-    const getDayStatus = (date: Date) => {
+    const getDayStatus = useCallback((date: Date) => {
         const holiday = isHoliday(date, holidays)
         if (holiday) return { type: 'holiday' as const, name: holiday.name || 'Holiday' }
         if (isWeeklyOff(date, weeklyOff)) return { type: 'weekoff' as const, name: 'Week Off' }
         return null
-    }
+    }, [holidays, weeklyOff])
 
     const employeeStatistics = useMemo(() => {
         const stats: Record<string, {
@@ -201,10 +205,10 @@ export function YearlyView() {
         })
 
         return stats
-    }, [employees, workingYearDates.dates, attendanceMap, holidays, weeklyOff])
+    }, [employees, workingYearDates.dates, attendanceMap, getDayStatus])
 
     const exportToExcel = () => {
-        const exportData: any[] = []
+        const exportData: (string | number)[][] = []
 
         // Header
         const headers = [
@@ -313,11 +317,11 @@ export function YearlyView() {
         leaveTypes.forEach(lt => tableHeaders.push(getLeaveTypeAbbreviation(lt.name || 'Leave')))
         workSites.forEach(ws => tableHeaders.push(ws.short_hand || getWorkSiteInitials(ws.name)))
 
-        const tableData: any[] = []
+        const tableData: (string | number | { content: string | number; styles: Record<string, unknown> })[][] = []
         groupedEmployees.forEach(({ category, employees: categoryEmployees }) => {
             categoryEmployees.forEach(employee => {
                 const stats = employeeStatistics[employee.id]
-                const row: any[] = [
+                const row: (string | number | { content: string | number; styles: Record<string, unknown> })[] = [
                     employee.employee_id || '-',
                     employee.name,
                     category,
@@ -358,9 +362,9 @@ export function YearlyView() {
         })
 
         // Add Legend
-        const finalY = (doc as any).lastAutoTable?.finalY || 40
+        const finalY = (doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY || 40
         const legendHeaders = ['Code', 'Description']
-        const legendData: any[] = []
+        const legendData: (string | number)[][] = []
 
         // Statuses
         legendData.push(['P', 'Present'])
@@ -393,7 +397,7 @@ export function YearlyView() {
             },
             didParseCell: (data) => {
                 if (data.section === 'body' && data.column.index === 0) {
-                    const code = (data.row.raw as any)[0]
+                    const code = (data.row.raw as (string | number)[])[0]
                     let rgb: [number, number, number] | null = null
 
                     if (code === 'P') rgb = getColorRGB('bg-green-100')
