@@ -46,6 +46,12 @@ import {
 } from '@/components/ui/tooltip'
 import { LeaveService, EmployeeLeaveBalance } from '@/lib/services/leave.service'
 import { format } from 'date-fns'
+import { 
+  normalizePhoneNumber, 
+  formatPhoneNumberForDisplay, 
+  formatPhoneNumberForInput,
+  validatePhoneNumber as validatePhoneUtil
+} from '@/lib/utils'
 
 const predefinedCategoryOrder = ['Worker Staff', 'Dubai Staff', 'Daily Basis Staff', 'Office Staff']
 
@@ -159,21 +165,23 @@ export function EmployeesTable({ searchQuery = '', onAddEmployeeTriggerRef }: Em
   }, [debouncedEmployeeId, isAddDialogOpen, isEditDialogOpen, editingEmployee])
   
   const validatePhone = (phoneNumber: string): boolean => {
-    if (!phoneNumber || !phoneNumber.trim()) {
-      return true
-    }
-    const cleaned = phoneNumber.replace(/[\s\-\(\)\+]/g, '')
-    const digitsOnly = cleaned.replace(/\D/g, '')
-    return digitsOnly.length === 10
+    return validatePhoneUtil(phoneNumber)
   }
 
   const handlePhoneChange = (value: string) => {
-    const digitsOnly = value.replace(/\D/g, '')
+    const cleanedValue = value.replace(/\+91\s*/g, '')
+    const digitsOnly = cleanedValue.replace(/\D/g, '')
     
     if (digitsOnly.length <= 10) {
-      setPhone(value)
+      if (digitsOnly.length === 10) {
+        setPhone(`+91 ${digitsOnly}`)
+      } else if (digitsOnly.length > 0) {
+        setPhone(digitsOnly)
+      } else {
+        setPhone('')
+      }
       
-      if (value && digitsOnly.length > 0 && digitsOnly.length !== 10) {
+      if (digitsOnly.length > 0 && digitsOnly.length !== 10) {
         setPhoneError('Phone number must be 10 digits (excluding country code)')
       } else {
         setPhoneError('')
@@ -209,7 +217,7 @@ export function EmployeesTable({ searchQuery = '', onAddEmployeeTriggerRef }: Em
     setEditingEmployee(employee)
     setEmployeeId(employee.employee_id || '')
     setName(employee.name || '')
-    setPhone(employee.phone || '')
+    setPhone(formatPhoneNumberForInput(employee.phone))
     setCategoryId(employee.category_id || '__none__')
     setDepartmentId(employee.department_id || '__none__')
     setJoiningDate(employee.joining_date ? new Date(employee.joining_date) : undefined)
@@ -261,7 +269,7 @@ export function EmployeesTable({ searchQuery = '', onAddEmployeeTriggerRef }: Em
       await createEmployee({
         employee_id: employeeId.trim() || undefined,
         name: name.trim(),
-        phone: phone.trim() || undefined,
+        phone: phone.trim() ? normalizePhoneNumber(phone) || undefined : undefined,
         category_id: categoryId && categoryId !== '__none__' ? categoryId : undefined,
         department_id: departmentId && departmentId !== '__none__' ? departmentId : undefined,
         joining_date: joiningDate ? format(joiningDate, 'yyyy-MM-dd') : undefined,
@@ -302,7 +310,8 @@ export function EmployeesTable({ searchQuery = '', onAddEmployeeTriggerRef }: Em
       }
       
       if (phone.trim()) {
-        updates.phone = phone.trim()
+        const normalized = normalizePhoneNumber(phone)
+        updates.phone = normalized || null
       } else {
         updates.phone = null
       }
@@ -581,7 +590,7 @@ export function EmployeesTable({ searchQuery = '', onAddEmployeeTriggerRef }: Em
                         {employee.name}
                       </TableCell>
                       <TableCell className="text-gray-600 px-4 py-3">
-                        {employee.phone || '-'}
+                        {formatPhoneNumberForDisplay(employee.phone)}
                       </TableCell>
                       <TableCell className="text-gray-600 px-4 py-3">
                         {employee.category?.name || '-'}
@@ -851,9 +860,20 @@ export function EmployeesTable({ searchQuery = '', onAddEmployeeTriggerRef }: Em
                     placeholder="1234567890"
                     value={phone}
                     onChange={(e) => handlePhoneChange(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Backspace' && phone.startsWith('+91 ')) {
+                        const digitsOnly = normalizePhoneNumber(phone)
+                        if (digitsOnly.length === 10 && e.currentTarget.selectionStart === phone.length) {
+                          e.preventDefault()
+                          setPhone(digitsOnly.slice(0, -1))
+                        }
+                      }
+                    }}
                     onBlur={() => {
                       if (phone && !validatePhone(phone)) {
                         setPhoneError('Phone number must be 10 digits (excluding country code)')
+                      } else {
+                        setPhoneError('')
                       }
                     }}
                     className={`h-11 border-gray-300 focus:border-[#23887C] focus:ring-[#23887C] focus:ring-1 ${
@@ -1079,12 +1099,23 @@ export function EmployeesTable({ searchQuery = '', onAddEmployeeTriggerRef }: Em
                   <Input
                     id="edit-phone"
                     type="tel"
-                    placeholder="+91 1234567890"
+                    placeholder="1234567890"
                     value={phone}
                     onChange={(e) => handlePhoneChange(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Backspace' && phone.startsWith('+91 ')) {
+                        const digitsOnly = normalizePhoneNumber(phone)
+                        if (digitsOnly.length === 10 && e.currentTarget.selectionStart === phone.length) {
+                          e.preventDefault()
+                          setPhone(digitsOnly.slice(0, -1))
+                        }
+                      }
+                    }}
                     onBlur={() => {
                       if (phone && !validatePhone(phone)) {
                         setPhoneError('Phone number must be 10 digits (excluding country code)')
+                      } else {
+                        setPhoneError('')
                       }
                     }}
                     className={`h-11 border-gray-300 focus:border-[#23887C] focus:ring-[#23887C] focus:ring-1 ${

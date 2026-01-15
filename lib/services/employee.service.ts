@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase'
+import { normalizePhoneNumber } from '@/lib/utils'
 
 export class EmployeeService {
   static async getEmployeeCount(): Promise<number> {
@@ -225,7 +226,8 @@ export class EmployeeService {
         payload.employee_id = employeeData.employee_id.trim()
       }
       if (employeeData.phone?.trim()) {
-        payload.phone = employeeData.phone.trim()
+        const normalized = normalizePhoneNumber(employeeData.phone)
+        payload.phone = normalized || null
       }
       if (employeeData.category_id) {
         payload.category_id = employeeData.category_id
