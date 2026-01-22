@@ -11,6 +11,7 @@ export interface Employee {
   department_id?: string
   work_site_id?: string
   joining_date?: string
+  exit_date?: string
   salary?: number | string
   status: 'active' | 'terminated' | 'released' | string
   created_at: string

@@ -31,6 +31,8 @@ export function CategoriesTab() {
   // Form state
   const [categoryName, setCategoryName] = useState('')
   const [categoryDescription, setCategoryDescription] = useState('')
+  const [timeIn, setTimeIn] = useState('')
+  const [timeOut, setTimeOut] = useState('')
   const [editingCategory, setEditingCategory] = useState<Category | null>(null)
   const [deletingCategory, setDeletingCategory] = useState<Category | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -57,11 +59,13 @@ export function CategoriesTab() {
 
     setIsSubmitting(true)
     try {
-      await createCategory(categoryName, categoryDescription)
+      await createCategory(categoryName, categoryDescription, timeIn, timeOut)
       
       // Reset form and close dialog
       setCategoryName('')
       setCategoryDescription('')
+      setTimeIn('')
+      setTimeOut('')
       setIsAddDialogOpen(false)
     } catch (error) {
       console.error('Error adding category:', error)
@@ -83,11 +87,15 @@ export function CategoriesTab() {
     try {
       // Pass description only if it has a value, otherwise pass undefined
       const descriptionToUpdate = categoryDescription.trim() || undefined
-      await updateCategory(editingCategory.id, categoryName, descriptionToUpdate)
+      const timeInToUpdate = timeIn.trim() || undefined
+      const timeOutToUpdate = timeOut.trim() || undefined
+      await updateCategory(editingCategory.id, categoryName, descriptionToUpdate, timeInToUpdate, timeOutToUpdate)
       
       // Reset form and close dialog
       setCategoryName('')
       setCategoryDescription('')
+      setTimeIn('')
+      setTimeOut('')
       setEditingCategory(null)
       setIsEditDialogOpen(false)
     } catch (error) {
@@ -123,6 +131,8 @@ export function CategoriesTab() {
     if (!open) {
       setCategoryName('')
       setCategoryDescription('')
+      setTimeIn('')
+      setTimeOut('')
     }
   }
 
@@ -130,6 +140,8 @@ export function CategoriesTab() {
     setEditingCategory(category)
     setCategoryName(category.name || category.title || '')
     setCategoryDescription(category.description || '')
+    setTimeIn(category.time_in || '')
+    setTimeOut(category.time_out || '')
     setIsEditDialogOpen(true)
   }
 
@@ -138,6 +150,8 @@ export function CategoriesTab() {
     if (!open) {
       setCategoryName('')
       setCategoryDescription('')
+      setTimeIn('')
+      setTimeOut('')
       setEditingCategory(null)
     }
   }
@@ -213,6 +227,40 @@ export function CategoriesTab() {
                   <p className="text-xs text-gray-400 mt-1">
                     This name will be used to categorize and organize employees in your system.
                   </p>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label 
+                      htmlFor="time-in" 
+                      className="text-sm font-medium text-gray-700 block"
+                    >
+                      Time In
+                    </label>
+                    <Input
+                      id="time-in"
+                      type="time"
+                      value={timeIn}
+                      onChange={(e) => setTimeIn(e.target.value)}
+                      className="h-11 border-gray-300 focus:border-[#23887C] focus:ring-[#23887C] focus:ring-1 transition-all duration-200"
+                      disabled={isSubmitting}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label 
+                      htmlFor="time-out" 
+                      className="text-sm font-medium text-gray-700 block"
+                    >
+                      Time Out
+                    </label>
+                    <Input
+                      id="time-out"
+                      type="time"
+                      value={timeOut}
+                      onChange={(e) => setTimeOut(e.target.value)}
+                      className="h-11 border-gray-300 focus:border-[#23887C] focus:ring-[#23887C] focus:ring-1 transition-all duration-200"
+                      disabled={isSubmitting}
+                    />
+                  </div>
                 </div>
                 <DialogFooter className="gap-3">
                   <Button
@@ -345,6 +393,40 @@ export function CategoriesTab() {
                 autoFocus
                 required
               />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label 
+                  htmlFor="edit-time-in" 
+                  className="text-sm font-medium text-gray-700 block"
+                >
+                  Time In
+                </label>
+                <Input
+                  id="edit-time-in"
+                  type="time"
+                  value={timeIn}
+                  onChange={(e) => setTimeIn(e.target.value)}
+                  className="h-11 border-gray-300 focus:border-[#23887C] focus:ring-[#23887C] focus:ring-1 transition-all duration-200"
+                  disabled={isSubmitting}
+                />
+              </div>
+              <div className="space-y-2">
+                <label 
+                  htmlFor="edit-time-out" 
+                  className="text-sm font-medium text-gray-700 block"
+                >
+                  Time Out
+                </label>
+                <Input
+                  id="edit-time-out"
+                  type="time"
+                  value={timeOut}
+                  onChange={(e) => setTimeOut(e.target.value)}
+                  className="h-11 border-gray-300 focus:border-[#23887C] focus:ring-[#23887C] focus:ring-1 transition-all duration-200"
+                  disabled={isSubmitting}
+                />
+              </div>
             </div>
             <DialogFooter className="gap-3">
               <Button

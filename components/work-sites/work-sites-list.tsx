@@ -1,9 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useWorkSites, WorkSite } from '@/lib/hooks/useWorkSites'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Building2, Plus, Edit2, Trash2, MapPin, AlertTriangle } from 'lucide-react'
+import { Building2, Plus, Edit2, Trash2, MapPin, AlertTriangle, CalendarIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -16,6 +16,7 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Calendar } from '@/components/ui/calendar'
 import { format } from 'date-fns'
 
 const getInitials = (name: string, shortHand?: string): string => {
@@ -57,26 +58,64 @@ export function WorkSitesList() {
   const [location, setLocation] = useState('')
   const [shortHand, setShortHand] = useState('')
   const [status, setStatus] = useState<string>('active')
+  const [startDate, setStartDate] = useState<Date | undefined>(undefined)
+  const [endDate, setEndDate] = useState<Date | undefined>(undefined)
+  const [timeIn, setTimeIn] = useState('')
+  const [timeOut, setTimeOut] = useState('')
   const [editingWorkSite, setEditingWorkSite] = useState<WorkSite | null>(null)
   const [deletingWorkSite, setDeletingWorkSite] = useState<WorkSite | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [showStartCalendar, setShowStartCalendar] = useState(false)
+  const [showEndCalendar, setShowEndCalendar] = useState(false)
+  const startCalendarRef = useRef<HTMLDivElement>(null)
+  const endCalendarRef = useRef<HTMLDivElement>(null)
+  const currentYear = new Date().getFullYear()
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (startCalendarRef.current && !startCalendarRef.current.contains(event.target as Node)) {
+        setShowStartCalendar(false)
+      }
+      if (endCalendarRef.current && !endCalendarRef.current.contains(event.target as Node)) {
+        setShowEndCalendar(false)
+      }
+    }
+    
+    if (showStartCalendar || showEndCalendar) {
+      document.addEventListener('mousedown', handleClickOutside)
+      return () => document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [showStartCalendar, showEndCalendar])
 
   const handleAddSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
-    if (!siteName.trim() || !location.trim()) {
+    if (!siteName.trim() || !location.trim() || !startDate) {
       return
     }
 
     setIsSubmitting(true)
     try {
-      await createWorkSite(siteName, location, status, shortHand || undefined)
+      await createWorkSite(
+        siteName, 
+        location, 
+        status, 
+        shortHand || undefined,
+        startDate ? format(startDate, 'yyyy-MM-dd') : undefined,
+        endDate ? format(endDate, 'yyyy-MM-dd') : undefined,
+        timeIn || undefined,
+        timeOut || undefined
+      )
       
       // Reset form and close dialog
       setSiteName('')
       setLocation('')
       setShortHand('')
       setStatus('active')
+      setStartDate(undefined)
+      setEndDate(undefined)
+      setTimeIn('')
+      setTimeOut('')
       setIsAddDialogOpen(false)
     } catch (error) {
       console.error('Error adding work site:', error)
@@ -90,19 +129,33 @@ export function WorkSitesList() {
   const handleEditSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
-    if (!siteName.trim() || !location.trim() || !editingWorkSite) {
+    if (!siteName.trim() || !location.trim() || !editingWorkSite || !startDate) {
       return
     }
 
     setIsSubmitting(true)
     try {
-      await updateWorkSite(editingWorkSite.id, siteName, location, status, shortHand || undefined)
+      await updateWorkSite(
+        editingWorkSite.id, 
+        siteName, 
+        location, 
+        status, 
+        shortHand || undefined,
+        startDate ? format(startDate, 'yyyy-MM-dd') : undefined,
+        endDate ? format(endDate, 'yyyy-MM-dd') : undefined,
+        timeIn || undefined,
+        timeOut || undefined
+      )
       
       // Reset form and close dialog
       setSiteName('')
       setLocation('')
       setShortHand('')
       setStatus('active')
+      setStartDate(undefined)
+      setEndDate(undefined)
+      setTimeIn('')
+      setTimeOut('')
       setEditingWorkSite(null)
       setIsEditDialogOpen(false)
     } catch (error) {
@@ -140,6 +193,12 @@ export function WorkSitesList() {
       setLocation('')
       setShortHand('')
       setStatus('active')
+      setStartDate(undefined)
+      setEndDate(undefined)
+      setTimeIn('')
+      setTimeOut('')
+      setShowStartCalendar(false)
+      setShowEndCalendar(false)
     }
   }
 
@@ -149,6 +208,10 @@ export function WorkSitesList() {
     setLocation(workSite.location)
     setShortHand(workSite.short_hand || '')
     setStatus(workSite.status)
+    setStartDate(workSite.start_date ? new Date(workSite.start_date) : undefined)
+    setEndDate(workSite.end_date ? new Date(workSite.end_date) : undefined)
+    setTimeIn(workSite.time_in || '')
+    setTimeOut(workSite.time_out || '')
     setIsEditDialogOpen(true)
   }
 
@@ -159,7 +222,13 @@ export function WorkSitesList() {
       setLocation('')
       setShortHand('')
       setStatus('active')
+      setStartDate(undefined)
+      setEndDate(undefined)
+      setTimeIn('')
+      setTimeOut('')
       setEditingWorkSite(null)
+      setShowStartCalendar(false)
+      setShowEndCalendar(false)
     }
   }
 
@@ -299,6 +368,117 @@ export function WorkSitesList() {
                   </SelectContent>
                 </Select>
               </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label 
+                    htmlFor="start-date" 
+                    className="text-sm font-medium text-gray-700 block"
+                  >
+                    Start Date <span className="text-red-500">*</span>
+                  </label>
+                  <div className="relative w-full" ref={startCalendarRef}>
+                    <Input
+                      id="start-date"
+                      type="text"
+                      readOnly
+                      placeholder="Select start date"
+                      value={startDate ? format(startDate, 'PPP') : ''}
+                      onClick={() => setShowStartCalendar(!showStartCalendar)}
+                      className="h-11 w-full border-gray-300 focus:border-[#23887C] focus:ring-[#23887C] focus:ring-1 cursor-pointer pr-10"
+                      disabled={isSubmitting}
+                      required
+                    />
+                    <CalendarIcon className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+                    {showStartCalendar && (
+                      <div className="absolute z-[100] mt-1 left-0 top-full bg-white border border-gray-300 rounded-md shadow-xl p-3">
+                        <Calendar
+                          mode="single"
+                          selected={startDate}
+                          onSelect={(date) => {
+                            setStartDate(date)
+                            setShowStartCalendar(false)
+                          }}
+                          disabled={isSubmitting}
+                          captionLayout="dropdown"
+                          fromYear={currentYear - 10}
+                          toYear={currentYear + 10}
+                        />
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label 
+                    htmlFor="end-date" 
+                    className="text-sm font-medium text-gray-700 block"
+                  >
+                    End Date <span className="text-gray-400 text-xs">(Optional)</span>
+                  </label>
+                  <div className="relative w-full" ref={endCalendarRef}>
+                    <Input
+                      id="end-date"
+                      type="text"
+                      readOnly
+                      placeholder="Select end date"
+                      value={endDate ? format(endDate, 'PPP') : ''}
+                      onClick={() => setShowEndCalendar(!showEndCalendar)}
+                      className="h-11 w-full border-gray-300 focus:border-[#23887C] focus:ring-[#23887C] focus:ring-1 cursor-pointer pr-10"
+                      disabled={isSubmitting}
+                    />
+                    <CalendarIcon className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+                    {showEndCalendar && (
+                      <div className="absolute z-[100] mt-1 left-0 top-full bg-white border border-gray-300 rounded-md shadow-xl p-3">
+                        <Calendar
+                          mode="single"
+                          selected={endDate}
+                          onSelect={(date) => {
+                            setEndDate(date)
+                            setShowEndCalendar(false)
+                          }}
+                          disabled={isSubmitting}
+                          captionLayout="dropdown"
+                          fromYear={currentYear - 10}
+                          toYear={currentYear + 10}
+                        />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label 
+                    htmlFor="time-in" 
+                    className="text-sm font-medium text-gray-700 block"
+                  >
+                    Time In
+                  </label>
+                  <Input
+                    id="time-in"
+                    type="time"
+                    value={timeIn}
+                    onChange={(e) => setTimeIn(e.target.value)}
+                    className="h-11 border-gray-300 focus:border-[#23887C] focus:ring-[#23887C] focus:ring-1 transition-all duration-200"
+                    disabled={isSubmitting}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label 
+                    htmlFor="time-out" 
+                    className="text-sm font-medium text-gray-700 block"
+                  >
+                    Time Out
+                  </label>
+                  <Input
+                    id="time-out"
+                    type="time"
+                    value={timeOut}
+                    onChange={(e) => setTimeOut(e.target.value)}
+                    className="h-11 border-gray-300 focus:border-[#23887C] focus:ring-[#23887C] focus:ring-1 transition-all duration-200"
+                    disabled={isSubmitting}
+                  />
+                </div>
+              </div>
               <DialogFooter className="gap-3">
                 <Button
                   type="button"
@@ -311,7 +491,7 @@ export function WorkSitesList() {
                 </Button>
                 <Button
                   type="submit"
-                  disabled={!siteName.trim() || !location.trim() || isSubmitting}
+                  disabled={!siteName.trim() || !location.trim() || !startDate || isSubmitting}
                   className="bg-[#23887C] hover:bg-[#23887C]/90 text-white disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isSubmitting ? (
@@ -493,6 +673,117 @@ export function WorkSitesList() {
                 </SelectContent>
               </Select>
             </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label 
+                  htmlFor="edit-start-date" 
+                  className="text-sm font-medium text-gray-700 block"
+                >
+                  Start Date <span className="text-red-500">*</span>
+                </label>
+                <div className="relative w-full" ref={startCalendarRef}>
+                  <Input
+                    id="edit-start-date"
+                    type="text"
+                    readOnly
+                    placeholder="Select start date"
+                    value={startDate ? format(startDate, 'PPP') : ''}
+                    onClick={() => setShowStartCalendar(!showStartCalendar)}
+                    className="h-11 w-full border-gray-300 focus:border-[#23887C] focus:ring-[#23887C] focus:ring-1 cursor-pointer pr-10"
+                    disabled={isSubmitting}
+                    required
+                  />
+                  <CalendarIcon className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+                  {showStartCalendar && (
+                    <div className="absolute z-[100] mt-1 left-0 top-full bg-white border border-gray-300 rounded-md shadow-xl p-3">
+                      <Calendar
+                        mode="single"
+                        selected={startDate}
+                        onSelect={(date) => {
+                          setStartDate(date)
+                          setShowStartCalendar(false)
+                        }}
+                        disabled={isSubmitting}
+                        captionLayout="dropdown"
+                        fromYear={currentYear - 10}
+                        toYear={currentYear + 10}
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div className="space-y-2">
+                <label 
+                  htmlFor="edit-end-date" 
+                  className="text-sm font-medium text-gray-700 block"
+                >
+                  End Date <span className="text-gray-400 text-xs">(Optional)</span>
+                </label>
+                <div className="relative w-full" ref={endCalendarRef}>
+                  <Input
+                    id="edit-end-date"
+                    type="text"
+                    readOnly
+                    placeholder="Select end date"
+                    value={endDate ? format(endDate, 'PPP') : ''}
+                    onClick={() => setShowEndCalendar(!showEndCalendar)}
+                    className="h-11 w-full border-gray-300 focus:border-[#23887C] focus:ring-[#23887C] focus:ring-1 cursor-pointer pr-10"
+                    disabled={isSubmitting}
+                  />
+                  <CalendarIcon className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+                  {showEndCalendar && (
+                    <div className="absolute z-[100] mt-1 left-0 top-full bg-white border border-gray-300 rounded-md shadow-xl p-3">
+                      <Calendar
+                        mode="single"
+                        selected={endDate}
+                        onSelect={(date) => {
+                          setEndDate(date)
+                          setShowEndCalendar(false)
+                        }}
+                        disabled={isSubmitting}
+                        captionLayout="dropdown"
+                        fromYear={currentYear - 10}
+                        toYear={currentYear + 10}
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label 
+                  htmlFor="edit-time-in" 
+                  className="text-sm font-medium text-gray-700 block"
+                >
+                  Time In
+                </label>
+                <Input
+                  id="edit-time-in"
+                  type="time"
+                  value={timeIn}
+                  onChange={(e) => setTimeIn(e.target.value)}
+                  className="h-11 border-gray-300 focus:border-[#23887C] focus:ring-[#23887C] focus:ring-1 transition-all duration-200"
+                  disabled={isSubmitting}
+                />
+              </div>
+              <div className="space-y-2">
+                <label 
+                  htmlFor="edit-time-out" 
+                  className="text-sm font-medium text-gray-700 block"
+                >
+                  Time Out
+                </label>
+                <Input
+                  id="edit-time-out"
+                  type="time"
+                  value={timeOut}
+                  onChange={(e) => setTimeOut(e.target.value)}
+                  className="h-11 border-gray-300 focus:border-[#23887C] focus:ring-[#23887C] focus:ring-1 transition-all duration-200"
+                  disabled={isSubmitting}
+                />
+              </div>
+            </div>
             <DialogFooter className="gap-3">
               <Button
                 type="button"
@@ -505,7 +796,7 @@ export function WorkSitesList() {
               </Button>
               <Button
                 type="submit"
-                disabled={!siteName.trim() || !location.trim() || isSubmitting}
+                disabled={!siteName.trim() || !location.trim() || !startDate || isSubmitting}
                 className="bg-[#23887C] hover:bg-[#23887C]/90 text-white disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isSubmitting ? (

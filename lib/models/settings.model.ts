@@ -4,6 +4,8 @@ export interface Category {
   title?: string
   description?: string
   status?: 'active' | 'inactive' | string
+  time_in?: string
+  time_out?: string
 }
 
 export interface Department {

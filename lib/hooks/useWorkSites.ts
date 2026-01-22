@@ -7,6 +7,10 @@ export interface WorkSite {
   location: string
   status: 'active' | 'completed' | 'on_hold' | 'cancelled' | string
   short_hand?: string
+  start_date?: string
+  end_date?: string
+  time_in?: string
+  time_out?: string
   created_at: string
 }
 
@@ -33,9 +37,18 @@ export function useWorkSites() {
     fetchWorkSites()
   }, [fetchWorkSites])
 
-  const createWorkSite = useCallback(async (name: string, location: string, status: string = 'active', shortHand?: string) => {
+  const createWorkSite = useCallback(async (
+    name: string, 
+    location: string, 
+    status: string = 'active', 
+    shortHand?: string,
+    startDate?: string,
+    endDate?: string,
+    timeIn?: string,
+    timeOut?: string
+  ) => {
     try {
-      const data = await WorkSiteService.createWorkSite(name, location, status, shortHand)
+      const data = await WorkSiteService.createWorkSite(name, location, status, shortHand, startDate, endDate, timeIn, timeOut)
       await fetchWorkSites()
       return data
     } catch (err) {
@@ -43,9 +56,19 @@ export function useWorkSites() {
     }
   }, [fetchWorkSites])
 
-  const updateWorkSite = useCallback(async (id: string, name: string, location: string, status: string, shortHand?: string) => {
+  const updateWorkSite = useCallback(async (
+    id: string, 
+    name: string, 
+    location: string, 
+    status: string, 
+    shortHand?: string,
+    startDate?: string,
+    endDate?: string,
+    timeIn?: string,
+    timeOut?: string
+  ) => {
     try {
-      const data = await WorkSiteService.updateWorkSite(id, name, location, status, shortHand)
+      const data = await WorkSiteService.updateWorkSite(id, name, location, status, shortHand, startDate, endDate, timeIn, timeOut)
       await fetchWorkSites()
       return data
     } catch (err) {

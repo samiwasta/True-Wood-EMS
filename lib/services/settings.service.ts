@@ -20,7 +20,7 @@ export class SettingsService {
     }
   }
 
-  static async createCategory(name: string, description?: string) {
+  static async createCategory(name: string, description?: string, timeIn?: string, timeOut?: string) {
     try {
       const trimmedName = name.trim()
       if (!trimmedName) {
@@ -34,6 +34,14 @@ export class SettingsService {
 
       if (description?.trim()) {
         payload.description = description.trim()
+      }
+
+      if (timeIn?.trim()) {
+        payload.time_in = timeIn.trim()
+      }
+
+      if (timeOut?.trim()) {
+        payload.time_out = timeOut.trim()
       }
 
       const { data, error } = await supabase
@@ -72,7 +80,7 @@ export class SettingsService {
     }
   }
 
-  static async updateCategory(id: string, name: string, description?: string) {
+  static async updateCategory(id: string, name: string, description?: string, timeIn?: string, timeOut?: string) {
     try {
       const trimmedName = name.trim()
       if (!trimmedName) {
@@ -93,6 +101,14 @@ export class SettingsService {
       // If not provided, don't include it in the update (preserves existing value)
       if (description !== undefined) {
         payload.description = description?.trim() || null
+      }
+
+      if (timeIn !== undefined) {
+        payload.time_in = timeIn?.trim() || null
+      }
+
+      if (timeOut !== undefined) {
+        payload.time_out = timeOut?.trim() || null
       }
 
       const { data, error } = await supabase

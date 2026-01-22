@@ -47,7 +47,16 @@ export class WorkSiteService {
     }
   }
 
-  static async createWorkSite(name: string, location: string, status: string = 'active', shortHand?: string) {
+  static async createWorkSite(
+    name: string, 
+    location: string, 
+    status: string = 'active', 
+    shortHand?: string,
+    startDate?: string,
+    endDate?: string,
+    timeIn?: string,
+    timeOut?: string
+  ) {
     try {
       const trimmedName = name.trim()
       const trimmedLocation = location.trim()
@@ -66,6 +75,19 @@ export class WorkSiteService {
         location: trimmedLocation,
         status: status,
         short_hand: trimmedShortHand || generateShortHand(trimmedName),
+      }
+
+      if (startDate) {
+        payload.start_date = startDate
+      }
+      if (endDate) {
+        payload.end_date = endDate
+      }
+      if (timeIn) {
+        payload.time_in = timeIn
+      }
+      if (timeOut) {
+        payload.time_out = timeOut
       }
 
       const { data, error } = await supabase
@@ -100,7 +122,17 @@ export class WorkSiteService {
     }
   }
 
-  static async updateWorkSite(id: string, name: string, location: string, status: string, shortHand?: string) {
+  static async updateWorkSite(
+    id: string, 
+    name: string, 
+    location: string, 
+    status: string, 
+    shortHand?: string,
+    startDate?: string,
+    endDate?: string,
+    timeIn?: string,
+    timeOut?: string
+  ) {
     try {
       if (!id) {
         throw new Error('Work site ID is required')
@@ -126,6 +158,27 @@ export class WorkSiteService {
         location: trimmedLocation,
         status: status,
         short_hand: finalShortHand,
+      }
+
+      if (startDate) {
+        payload.start_date = startDate
+      } else {
+        payload.start_date = null
+      }
+      if (endDate) {
+        payload.end_date = endDate
+      } else {
+        payload.end_date = null
+      }
+      if (timeIn) {
+        payload.time_in = timeIn
+      } else {
+        payload.time_in = null
+      }
+      if (timeOut) {
+        payload.time_out = timeOut
+      } else {
+        payload.time_out = null
       }
 
       const { data, error } = await supabase

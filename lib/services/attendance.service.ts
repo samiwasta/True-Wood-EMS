@@ -173,6 +173,26 @@ export class AttendanceService {
     }
   }
 
+  static async deleteAttendanceRecord(employeeId: string, date: string) {
+    try {
+      const { error } = await supabase
+        .from('attendance_records')
+        .delete()
+        .eq('employee_id', employeeId)
+        .eq('date', date)
+
+      if (error) {
+        console.error('Error deleting attendance record:', error)
+        throw error
+      }
+
+      return true
+    } catch (error) {
+      console.error('Error deleting attendance record:', error)
+      throw error
+    }
+  }
+
   static async getAttendanceByDateRange(startDate: string, endDate: string) {
     try {
       const { data, error } = await supabase

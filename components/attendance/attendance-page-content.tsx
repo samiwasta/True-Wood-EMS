@@ -13,7 +13,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover'
-import { Calendar, ChevronLeft, ChevronRight, Save, RotateCcw, CheckCircle2, XCircle, CalendarDays, Building2, Wrench, Search } from 'lucide-react'
+import { Calendar, ChevronLeft, ChevronRight, Save, RotateCcw, CheckCircle2, XCircle, CalendarDays, Building2, Wrench, Search, X } from 'lucide-react'
 import { format, addDays, isToday } from 'date-fns'
 import { useDebounce } from '@/lib/hooks/useDebounce'
 
@@ -179,6 +179,7 @@ export function AttendancePageContent() {
       })
 
       await Promise.all(promises)
+      await fetchAttendance(selectedDate)
       alert('Attendance saved successfully!')
     } catch (error) {
       console.error('Error saving attendance:', error)
@@ -221,8 +222,46 @@ export function AttendancePageContent() {
     })
   }
 
+  const handleClearAttendance = async (employeeId: string) => {
+    if (!confirm('Are you sure you want to clear the attendance for this employee?')) {
+      return
+    }
+
+    try {
+      const dateStr = format(selectedDate, 'yyyy-MM-dd')
+      await AttendanceService.deleteAttendanceRecord(employeeId, dateStr)
+      
+      setAttendanceRecords(prev => {
+        const updated = { ...prev }
+        delete updated[employeeId]
+        return updated
+      })
+      
+      setSelectedLeaveType(prev => {
+        const updated = { ...prev }
+        delete updated[employeeId]
+        return updated
+      })
+      
+      setSelectedWorkSite(prev => {
+        const updated = { ...prev }
+        delete updated[employeeId]
+        return updated
+      })
+      
+      await fetchAttendance(selectedDate)
+    } catch (error) {
+      console.error('Error clearing attendance:', error)
+      alert('Failed to clear attendance. Please try again.')
+    }
+  }
+
   const getEmployeeStatus = (employeeId: string): 'present' | 'absent' | 'leave' | null => {
     return attendanceRecords[employeeId]?.status || null
+  }
+
+  const hasAttendanceRecord = (employeeId: string): boolean => {
+    return !!attendanceRecords[employeeId]
   }
 
   const getLeaveTypeName = (employeeId: string): string => {
@@ -762,6 +801,17 @@ export function AttendancePageContent() {
                               </div>
                             </PopoverContent>
                           </Popover>
+                          {hasAttendanceRecord(employee.id) && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleClearAttendance(employee.id)}
+                              className="h-9 px-3 border-red-300 text-red-600 hover:bg-red-50 hover:border-red-400"
+                            >
+                              <X className="h-4 w-4 mr-1.5" />
+                              Clear
+                            </Button>
+                          )}
                         </div>
                       </td>
                     </tr>

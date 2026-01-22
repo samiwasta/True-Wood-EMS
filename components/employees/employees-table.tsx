@@ -45,6 +45,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { LeaveService, EmployeeLeaveBalance } from '@/lib/services/leave.service'
+import { EmploymentHistoryService, EmploymentHistory } from '@/lib/services/employment-history.service'
 import { format } from 'date-fns'
 import { 
   normalizePhoneNumber, 
@@ -52,6 +53,7 @@ import {
   formatPhoneNumberForInput,
   validatePhoneNumber as validatePhoneUtil
 } from '@/lib/utils'
+import { History } from 'lucide-react'
 
 const predefinedCategoryOrder = ['Worker Staff', 'Dubai Staff', 'Daily Basis Staff', 'Office Staff']
 
@@ -87,11 +89,14 @@ export function EmployeesTable({ searchQuery = '', onAddEmployeeTriggerRef }: Em
   const [categoryId, setCategoryId] = useState<string>('__none__')
   const [departmentId, setDepartmentId] = useState<string>('__none__')
   const [joiningDate, setJoiningDate] = useState<Date | undefined>(undefined)
+  const [exitDate, setExitDate] = useState<Date | undefined>(undefined)
   const [salary, setSalary] = useState('')
   const [status, setStatus] = useState('active')
   
   const [showJoiningCalendar, setShowJoiningCalendar] = useState(false)
+  const [showExitCalendar, setShowExitCalendar] = useState(false)
   const joiningCalendarRef = useRef<HTMLDivElement>(null)
+  const exitCalendarRef = useRef<HTMLDivElement>(null)
   const currentYear = new Date().getFullYear()
   
   const [employeeIdError, setEmployeeIdError] = useState<string>('')
@@ -107,6 +112,12 @@ export function EmployeesTable({ searchQuery = '', onAddEmployeeTriggerRef }: Em
   const [leaveBalanceLoading, setLeaveBalanceLoading] = useState(false)
   const [leaveBalanceError, setLeaveBalanceError] = useState<string | null>(null)
   
+  const [historyDialogOpen, setHistoryDialogOpen] = useState(false)
+  const [historyEmployee, setHistoryEmployee] = useState<Employee | null>(null)
+  const [employmentHistory, setEmploymentHistory] = useState<EmploymentHistory[]>([])
+  const [historyLoading, setHistoryLoading] = useState(false)
+  const [historyError, setHistoryError] = useState<string | null>(null)
+  
   useEffect(() => {
     if (onAddEmployeeTriggerRef) {
       onAddEmployeeTriggerRef.current = () => {
@@ -121,13 +132,16 @@ export function EmployeesTable({ searchQuery = '', onAddEmployeeTriggerRef }: Em
       if (joiningCalendarRef.current && !joiningCalendarRef.current.contains(event.target as Node)) {
         setShowJoiningCalendar(false)
       }
+      if (exitCalendarRef.current && !exitCalendarRef.current.contains(event.target as Node)) {
+        setShowExitCalendar(false)
+      }
     }
     
-    if (showJoiningCalendar) {
+    if (showJoiningCalendar || showExitCalendar) {
       document.addEventListener('mousedown', handleClickOutside)
       return () => document.removeEventListener('mousedown', handleClickOutside)
     }
-  }, [showJoiningCalendar])
+  }, [showJoiningCalendar, showExitCalendar])
 
   useEffect(() => {
     const validateEmployeeId = async () => {
@@ -204,6 +218,7 @@ export function EmployeesTable({ searchQuery = '', onAddEmployeeTriggerRef }: Em
     setCategoryId('__none__')
     setDepartmentId('__none__')
     setJoiningDate(undefined)
+    setExitDate(undefined)
     setSalary('')
     setStatus('active')
     setEmployeeIdError('')
@@ -221,6 +236,7 @@ export function EmployeesTable({ searchQuery = '', onAddEmployeeTriggerRef }: Em
     setCategoryId(employee.category_id || '__none__')
     setDepartmentId(employee.department_id || '__none__')
     setJoiningDate(employee.joining_date ? new Date(employee.joining_date) : undefined)
+    setExitDate(employee.exit_date ? new Date(employee.exit_date) : undefined)
     setSalary(employee.salary ? String(employee.salary) : '')
     setStatus(employee.status || 'active')
     setIsEditDialogOpen(true)
@@ -273,6 +289,7 @@ export function EmployeesTable({ searchQuery = '', onAddEmployeeTriggerRef }: Em
         category_id: categoryId && categoryId !== '__none__' ? categoryId : undefined,
         department_id: departmentId && departmentId !== '__none__' ? departmentId : undefined,
         joining_date: joiningDate ? format(joiningDate, 'yyyy-MM-dd') : undefined,
+        exit_date: exitDate ? format(exitDate, 'yyyy-MM-dd') : undefined,
         salary: salary ? parseFloat(salary) : undefined,
         status: status,
       })
@@ -332,6 +349,12 @@ export function EmployeesTable({ searchQuery = '', onAddEmployeeTriggerRef }: Em
         updates.joining_date = format(joiningDate, 'yyyy-MM-dd')
       } else {
         updates.joining_date = null
+      }
+      
+      if (exitDate) {
+        updates.exit_date = format(exitDate, 'yyyy-MM-dd')
+      } else {
+        updates.exit_date = null
       }
       
       if (salary) {
@@ -490,6 +513,31 @@ export function EmployeesTable({ searchQuery = '', onAddEmployeeTriggerRef }: Em
     }
   }
 
+  const handleViewHistory = async (employee: Employee) => {
+    if (!employee.id) {
+      console.error('Employee ID is missing:', employee)
+      return
+    }
+    
+    setHistoryEmployee(employee)
+    setHistoryDialogOpen(true)
+    setHistoryLoading(true)
+    setHistoryError(null)
+    setEmploymentHistory([])
+    
+    try {
+      const history = await EmploymentHistoryService.getEmploymentHistory(employee.id)
+      setEmploymentHistory(history)
+    } catch (error) {
+      console.error('Error fetching employment history:', error)
+      const errorMessage = error instanceof Error ? error.message : 'Failed to load employment history'
+      setHistoryError(errorMessage)
+      setEmploymentHistory([])
+    } finally {
+      setHistoryLoading(false)
+    }
+  }
+
   const handleDeleteDialogOpenChange = (open: boolean) => {
     setIsDeleteDialogOpen(open)
     if (!open) {
@@ -611,6 +659,21 @@ export function EmployeesTable({ searchQuery = '', onAddEmployeeTriggerRef }: Em
                       </TableCell>
                       <TableCell className="text-right px-4 py-3">
                         <div className="flex items-center justify-end gap-2">
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon-sm"
+                                className="h-8 w-8 text-purple-600 hover:text-purple-700 hover:bg-purple-50 rounded-md transition-colors"
+                                onClick={() => handleViewHistory(employee)}
+                              >
+                                <History className="h-4 w-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>View Employment History</p>
+                            </TooltipContent>
+                          </Tooltip>
                           <Popover 
                             open={leaveBalanceOpen === employee.id} 
                             onOpenChange={(open) => {
@@ -808,6 +871,40 @@ export function EmployeesTable({ searchQuery = '', onAddEmployeeTriggerRef }: Em
                           onSelect={(date) => {
                             setJoiningDate(date)
                             setShowJoiningCalendar(false)
+                          }}
+                          disabled={isSubmitting}
+                          captionLayout="dropdown"
+                          fromYear={currentYear - 50}
+                          toYear={currentYear + 1}
+                        />
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label htmlFor="add-exit-date" className="text-sm font-medium text-gray-700 block">
+                    Exit Date
+                  </label>
+                  <div className="relative w-full" ref={exitCalendarRef}>
+                    <Input
+                      id="add-exit-date"
+                      type="text"
+                      readOnly
+                      placeholder="Select exit date"
+                      value={exitDate ? format(exitDate, 'PPP') : ''}
+                      onClick={() => setShowExitCalendar(!showExitCalendar)}
+                      className="h-11 w-full border-gray-300 focus:border-[#23887C] focus:ring-[#23887C] focus:ring-1 cursor-pointer pr-10"
+                      disabled={isSubmitting}
+                    />
+                    <CalendarIcon className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+                    {showExitCalendar && (
+                      <div className="absolute z-[100] mt-1 left-0 top-full bg-white border border-gray-300 rounded-md shadow-xl p-3">
+                        <Calendar
+                          mode="single"
+                          selected={exitDate}
+                          onSelect={(date) => {
+                            setExitDate(date)
+                            setShowExitCalendar(false)
                           }}
                           disabled={isSubmitting}
                           captionLayout="dropdown"
@@ -1060,6 +1157,40 @@ export function EmployeesTable({ searchQuery = '', onAddEmployeeTriggerRef }: Em
                     )}
                   </div>
                 </div>
+                <div className="space-y-2">
+                  <label htmlFor="edit-exit-date" className="text-sm font-medium text-gray-700 block">
+                    Exit Date
+                  </label>
+                  <div className="relative w-full" ref={exitCalendarRef}>
+                    <Input
+                      id="edit-exit-date"
+                      type="text"
+                      readOnly
+                      placeholder="Select exit date"
+                      value={exitDate ? format(exitDate, 'PPP') : ''}
+                      onClick={() => setShowExitCalendar(!showExitCalendar)}
+                      className="h-11 w-full border-gray-300 focus:border-[#23887C] focus:ring-[#23887C] focus:ring-1 cursor-pointer pr-10"
+                      disabled={isSubmitting}
+                    />
+                    <CalendarIcon className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+                    {showExitCalendar && (
+                      <div className="absolute z-[100] mt-1 left-0 top-full bg-white border border-gray-300 rounded-md shadow-xl p-3">
+                        <Calendar
+                          mode="single"
+                          selected={exitDate}
+                          onSelect={(date) => {
+                            setExitDate(date)
+                            setShowExitCalendar(false)
+                          }}
+                          disabled={isSubmitting}
+                          captionLayout="dropdown"
+                          fromYear={currentYear - 50}
+                          toYear={currentYear + 1}
+                        />
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
@@ -1173,24 +1304,6 @@ export function EmployeesTable({ searchQuery = '', onAddEmployeeTriggerRef }: Em
                   </label>
                   <Select value={status} onValueChange={setStatus} disabled={isSubmitting}>
                     <SelectTrigger className="w-full h-11 border-gray-300 focus:border-[#23887C] focus:ring-[#23887C]">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="w-full">
-                      <SelectItem value="active">Active</SelectItem>
-                      <SelectItem value="terminated">Terminated</SelectItem>
-                      <SelectItem value="released">Released</SelectItem>
-                      <SelectItem value="transferred">Transferred</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label htmlFor="edit-status" className="text-sm font-medium text-gray-700 block">
-                    Status <span className="text-red-500">*</span>
-                  </label>
-                  <Select value={status} onValueChange={setStatus} disabled={isSubmitting}>
-                    <SelectTrigger className="w-full h-11! border-gray-300 focus:border-[#23887C] focus:ring-[#23887C]">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent className="w-full">
@@ -1321,6 +1434,122 @@ export function EmployeesTable({ searchQuery = '', onAddEmployeeTriggerRef }: Em
                   Delete Employee
                 </>
               )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Employment History Dialog */}
+      <Dialog 
+        open={historyDialogOpen} 
+        onOpenChange={(open) => {
+          setHistoryDialogOpen(open)
+          if (!open) {
+            setHistoryEmployee(null)
+            setEmploymentHistory([])
+            setHistoryError(null)
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-semibold text-gray-900 flex items-center gap-2">
+              <History className="h-5 w-5 text-[#23887C]" />
+              Employment History
+            </DialogTitle>
+            <DialogDescription className="text-gray-500">
+              {historyEmployee && (
+                <>
+                  View employment history for <span className="font-semibold text-gray-900">{historyEmployee.name}</span>
+                  {historyEmployee.employee_id && (
+                    <> (ID: {historyEmployee.employee_id})</>
+                  )}
+                </>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            {historyLoading ? (
+              <div className="py-8 text-center">
+                <div className="inline-block h-8 w-8 border-2 border-[#23887C] border-t-transparent rounded-full animate-spin" />
+                <p className="text-sm text-gray-500 mt-3">Loading employment history...</p>
+              </div>
+            ) : historyError ? (
+              <div className="py-8 text-center">
+                <AlertTriangle className="h-8 w-8 text-red-500 mx-auto mb-3" />
+                <p className="text-sm text-red-600">{historyError}</p>
+              </div>
+            ) : employmentHistory.length === 0 ? (
+              <div className="py-8 text-center">
+                <History className="h-12 w-12 text-gray-400 mx-auto mb-3" />
+                <p className="text-sm text-gray-500">No employment history found</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {employmentHistory.map((record, index) => (
+                  <div
+                    key={record.id}
+                    className="p-4 bg-gray-50 rounded-lg border border-gray-200 hover:border-[#23887C]/30 transition-colors"
+                  >
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <div className="p-2 bg-[#23887C]/10 rounded-lg">
+                          <History className="h-4 w-4 text-[#23887C]" />
+                        </div>
+                        <div>
+                          <p className="font-semibold text-gray-900">Period {employmentHistory.length - index}</p>
+                          <p className="text-xs text-gray-500 mt-0.5">
+                            {record.status === 'active' ? 'Current' : 'Previous'} Employment
+                          </p>
+                        </div>
+                      </div>
+                      <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${
+                        record.status === 'active'
+                          ? 'bg-green-100 text-green-700 border border-green-200'
+                          : 'bg-gray-100 text-gray-700 border border-gray-200'
+                      }`}>
+                        {record.status}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4 mt-3">
+                      <div>
+                        <p className="text-xs text-gray-500 mb-1">Joining Date</p>
+                        <p className="text-sm font-medium text-gray-900">
+                          {format(new Date(record.joining_date), 'PPP')}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500 mb-1">Exit Date</p>
+                        <p className="text-sm font-medium text-gray-900">
+                          {record.exit_date ? format(new Date(record.exit_date), 'PPP') : '-'}
+                        </p>
+                      </div>
+                    </div>
+                    {record.exit_date && (
+                      <div className="mt-3 pt-3 border-t border-gray-200">
+                        <p className="text-xs text-gray-500">
+                          Duration: {Math.ceil((new Date(record.exit_date).getTime() - new Date(record.joining_date).getTime()) / (1000 * 60 * 60 * 24))} days
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setHistoryDialogOpen(false)
+                setHistoryEmployee(null)
+                setEmploymentHistory([])
+                setHistoryError(null)
+              }}
+              className="border-gray-300 text-gray-700 hover:bg-gray-50"
+            >
+              Close
             </Button>
           </DialogFooter>
         </DialogContent>
