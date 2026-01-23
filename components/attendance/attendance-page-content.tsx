@@ -144,6 +144,7 @@ export function AttendancePageContent() {
     try {
       const savedRecord = await AttendanceService.saveAttendance(employeeId, dateStr, status, leaveTypeId || undefined, workSiteId || undefined)
       
+      // Update local state immediately for instant feedback
       setAttendanceRecords(prev => ({
         ...prev,
         [employeeId]: {
@@ -155,6 +156,36 @@ export function AttendancePageContent() {
           work_site_id: workSiteId,
         } as AttendanceRecord,
       }))
+      
+      // Also update leave type and work site selections
+      if (leaveTypeId) {
+        setSelectedLeaveType(prev => ({
+          ...prev,
+          [employeeId]: leaveTypeId,
+        }))
+      } else if (status !== 'leave') {
+        setSelectedLeaveType(prev => {
+          const updated = { ...prev }
+          delete updated[employeeId]
+          return updated
+        })
+      }
+      
+      if (workSiteId) {
+        setSelectedWorkSite(prev => ({
+          ...prev,
+          [employeeId]: workSiteId,
+        }))
+      } else {
+        setSelectedWorkSite(prev => {
+          const updated = { ...prev }
+          delete updated[employeeId]
+          return updated
+        })
+      }
+      
+      // Refetch from server to ensure consistency
+      await fetchAttendance(selectedDate)
     } catch (error) {
       console.error('Error saving attendance:', error)
       alert('Failed to save attendance. Please try again.')
