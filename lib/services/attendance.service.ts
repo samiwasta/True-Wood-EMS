@@ -105,12 +105,14 @@ export class AttendanceService {
     workSiteId?: string | null
   ) {
     try {
-      const { data: existing, error: checkError } = await supabase
+      const { data: existingRecords, error: checkError } = await supabase
         .from('attendance_records')
         .select('id')
         .eq('employee_id', employeeId)
         .eq('date', date)
-        .single()
+        .limit(1)
+
+      const existing = existingRecords && existingRecords.length > 0 ? existingRecords[0] : null
 
       const payload: Record<string, unknown> = {
         employee_id: employeeId,

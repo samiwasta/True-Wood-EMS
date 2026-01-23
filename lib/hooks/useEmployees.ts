@@ -58,6 +58,7 @@ export function useEmployees() {
     department_id?: string
     work_site_id?: string
     joining_date?: string
+    exit_date?: string
     salary?: number | string
     status?: string
   }) => {
