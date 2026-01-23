@@ -197,6 +197,8 @@ export class AttendanceService {
 
   static async getAttendanceByDateRange(startDate: string, endDate: string) {
     try {
+      // Fetch all records without the default 1000 row limit
+      // A month of attendance for ~50 employees = ~1500 records max
       const { data, error } = await supabase
         .from('attendance_records')
         .select(`
@@ -212,6 +214,7 @@ export class AttendanceService {
         .lte('date', endDate)
         .order('date', { ascending: true })
         .order('employee_id', { ascending: true })
+        .limit(5000) // Increase limit to handle full month of attendance data
 
       if (error) {
         console.error('Error fetching attendance by date range:', error)
