@@ -14,7 +14,7 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover'
 import { Calendar, ChevronLeft, ChevronRight, Save, RotateCcw, CheckCircle2, XCircle, CalendarDays, Building2, Wrench, Search, X } from 'lucide-react'
-import { format, addDays, isToday } from 'date-fns'
+import { format, addDays } from 'date-fns'
 import { useDebounce } from '@/lib/hooks/useDebounce'
 
 const predefinedCategoryOrder = ['Worker Staff', 'Dubai Staff', 'Daily Basis Staff', 'Office Staff']
@@ -190,12 +190,8 @@ export function AttendancePageContent() {
   }
 
   const handleReset = async () => {
-    if (!isToday(selectedDate)) {
-      alert('Reset is only available for today\'s date.')
-      return
-    }
-
-    if (!confirm('Are you sure you want to reset all attendance for today? This action cannot be undone.')) {
+    const dateStr = format(selectedDate, 'PPP')
+    if (!confirm(`Are you sure you want to reset all attendance for ${dateStr}? This action cannot be undone.`)) {
       return
     }
 
@@ -287,8 +283,12 @@ export function AttendancePageContent() {
   const groupedEmployees = useMemo(() => {
     const grouped: Record<string, Employee[]> = {}
     
-    // Filter employees based on search query
+    // Filter employees based on search query and status (only active employees)
     const filteredEmployees = employees.filter((employee: Employee) => {
+      // Only show active employees
+      if (employee.status !== 'active') return false
+      
+      // Filter by search query if provided
       if (!debouncedSearch.trim()) return true
       const searchLower = debouncedSearch.toLowerCase()
       const employeeId = (employee.employee_id || '').toLowerCase()
@@ -412,17 +412,15 @@ export function AttendancePageContent() {
             <Save className="h-4 w-4 mr-2" />
             {saving ? 'Saving...' : 'Save Attendance'}
           </Button>
-          {isToday(selectedDate) && (
-            <Button
-              onClick={handleReset}
-              disabled={resetting || loading}
-              variant="outline"
-              className="border-red-300 text-red-600 hover:bg-red-50"
-            >
-              <RotateCcw className="h-4 w-4 mr-2" />
-              {resetting ? 'Resetting...' : 'Reset Attendance'}
-            </Button>
-          )}
+          <Button
+            onClick={handleReset}
+            disabled={resetting || loading}
+            variant="outline"
+            className="border-red-300 text-red-600 hover:bg-red-50"
+          >
+            <RotateCcw className="h-4 w-4 mr-2" />
+            {resetting ? 'Resetting...' : 'Reset Attendance'}
+          </Button>
         </div>
       </div>
 

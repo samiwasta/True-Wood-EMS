@@ -573,6 +573,8 @@ export function EmployeesTable({ searchQuery = '', onAddEmployeeTriggerRef }: Em
         return 'bg-red-100 text-red-700 border border-red-200'
       case 'released':
         return 'bg-gray-100 text-gray-700 border border-gray-200'
+      case 'resigned':
+        return 'bg-orange-100 text-orange-700 border border-orange-200'
       case 'transferred':
         return 'bg-blue-100 text-blue-700 border border-blue-200'
       default:
@@ -1034,6 +1036,7 @@ export function EmployeesTable({ searchQuery = '', onAddEmployeeTriggerRef }: Em
                       <SelectItem value="active">Active</SelectItem>
                       <SelectItem value="terminated">Terminated</SelectItem>
                       <SelectItem value="released">Released</SelectItem>
+                      <SelectItem value="resigned">Resigned</SelectItem>
                       <SelectItem value="transferred">Transferred</SelectItem>
                     </SelectContent>
                   </Select>
@@ -1310,6 +1313,7 @@ export function EmployeesTable({ searchQuery = '', onAddEmployeeTriggerRef }: Em
                       <SelectItem value="active">Active</SelectItem>
                       <SelectItem value="terminated">Terminated</SelectItem>
                       <SelectItem value="released">Released</SelectItem>
+                      <SelectItem value="resigned">Resigned</SelectItem>
                       <SelectItem value="transferred">Transferred</SelectItem>
                     </SelectContent>
                   </Select>
