@@ -197,31 +197,47 @@ export class AttendanceService {
 
   static async getAttendanceByDateRange(startDate: string, endDate: string) {
     try {
-      // Fetch all records without the default 1000 row limit
+      // Fetch all records using pagination to bypass Supabase's default 1000 row limit
       // A month of attendance for ~50 employees = ~1500 records max
-      const { data, error } = await supabase
-        .from('attendance_records')
-        .select(`
-          id,
-          employee_id,
-          date,
-          status,
-          leave_type_id,
-          work_site_id,
-          employees!attendance_records_employee_id_fkey(id, employee_id, name, category:categories(id, name), department:departments(id, name))
-        `)
-        .gte('date', startDate)
-        .lte('date', endDate)
-        .order('date', { ascending: true })
-        .order('employee_id', { ascending: true })
-        .limit(5000) // Increase limit to handle full month of attendance data
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const allRecords: any[] = []
+      let offset = 0
+      const pageSize = 1000
+      let hasMore = true
 
-      if (error) {
-        console.error('Error fetching attendance by date range:', error)
-        throw error
+      while (hasMore) {
+        const { data, error } = await supabase
+          .from('attendance_records')
+          .select(`
+            id,
+            employee_id,
+            date,
+            status,
+            leave_type_id,
+            work_site_id,
+            employees!attendance_records_employee_id_fkey(id, employee_id, name, category:categories(id, name), department:departments(id, name))
+          `)
+          .gte('date', startDate)
+          .lte('date', endDate)
+          .order('date', { ascending: true })
+          .order('employee_id', { ascending: true })
+          .range(offset, offset + pageSize - 1)
+
+        if (error) {
+          console.error('Error fetching attendance by date range:', error)
+          throw error
+        }
+
+        if (data && data.length > 0) {
+          allRecords.push(...data)
+          offset += pageSize
+          hasMore = data.length === pageSize
+        } else {
+          hasMore = false
+        }
       }
 
-      return data ?? []
+      return allRecords
     } catch (error) {
       console.error('Error fetching attendance by date range:', error)
       throw error
