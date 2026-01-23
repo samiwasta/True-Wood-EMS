@@ -184,6 +184,28 @@ export function MonthlyView() {
       )
     }
 
+    // Filter employees based on their status during the selected month
+    const monthStart = workingMonth.start
+    const monthEnd = workingMonth.end
+    
+    filteredEmployees = filteredEmployees.filter((employee: Employee) => {
+      // If employee is currently active, include them
+      if (employee.status === 'active') {
+        return true
+      }
+
+      // If employee is not active, check if they became inactive during this month
+      // Include them only if their exit_date is within this month
+      if (employee.exit_date) {
+        const exitDate = new Date(employee.exit_date)
+        // Include if exit date is within the month (they became inactive during this month)
+        return exitDate >= monthStart && exitDate <= monthEnd
+      }
+
+      // If no exit_date but status is not active, exclude them
+      return false
+    })
+
     filteredEmployees.forEach((employee: Employee) => {
       const categoryName = employee.category?.name || 'Uncategorized'
       if (!grouped[categoryName]) {
@@ -218,7 +240,7 @@ export function MonthlyView() {
       category,
       employees: grouped[category],
     }))
-  }, [employees, searchQuery])
+  }, [employees, searchQuery, workingMonth.start, workingMonth.end])
 
   const attendanceMap = useMemo(() => {
     const map: Record<string, Record<string, AttendanceRecord>> = {}
@@ -846,21 +868,38 @@ export function MonthlyView() {
                   </div>
 
                   {/* Employee Rows */}
-                  {categoryEmployees.map((employee, index) => (
+                  {categoryEmployees.map((employee, index) => {
+                    // Check if employee should be highlighted (non-active during this month)
+                    const isNonActive = employee.status !== 'active'
+                    const exitDate = employee.exit_date ? new Date(employee.exit_date) : null
+                    const becameInactiveThisMonth = exitDate && exitDate >= workingMonth.start && exitDate <= workingMonth.end
+                    const shouldHighlight = isNonActive && becameInactiveThisMonth
+                    
+                    return (
                     <React.Fragment key={employee.id}>
                       <div
                         className={cn(
-                          "sticky left-0 z-10 px-4 py-3 font-medium text-gray-900 border-b border-gray-200 transition-all duration-200",
+                          "sticky left-0 z-10 px-4 py-3 font-medium border-b border-gray-200 transition-all duration-200",
                           index % 2 === 0 ? 'bg-white' : 'bg-gray-50',
-                          hoveredRow === employee.id && 'bg-blue-50'
+                          hoveredRow === employee.id && 'bg-blue-50',
+                          shouldHighlight && 'bg-yellow-100 border-yellow-300 border-l-4'
                         )}
                         onMouseEnter={() => setHoveredRow(employee.id)}
                         onMouseLeave={() => setHoveredRow(null)}
                       >
                         <div className="flex flex-col gap-1">
-                          <span className="text-sm font-bold text-[#23887C]">{employee.employee_id || '-'}</span>
-                          <span className="text-xs text-gray-600 truncate">
+                          <span className={cn(
+                            "text-sm font-bold",
+                            shouldHighlight ? 'text-yellow-800' : 'text-[#23887C]'
+                          )}>
+                            {employee.employee_id || '-'}
+                          </span>
+                          <span className={cn(
+                            "text-xs truncate",
+                            shouldHighlight ? 'text-yellow-700 font-semibold' : 'text-gray-600'
+                          )}>
                             {employee.name}
+                            {shouldHighlight && ` (${employee.status})`}
                           </span>
                         </div>
                       </div>
@@ -891,7 +930,8 @@ export function MonthlyView() {
                             className={cn(
                               "text-center text-xs font-semibold py-2 px-1 border-b border-gray-200 transition-all duration-200 flex items-center justify-center",
                               index % 2 === 0 ? 'bg-white' : 'bg-gray-50',
-                              hoveredRow === employee.id && 'bg-blue-50'
+                              hoveredRow === employee.id && 'bg-blue-50',
+                              shouldHighlight && 'bg-yellow-50'
                             )}
                             onMouseEnter={() => setHoveredRow(employee.id)}
                             onMouseLeave={() => setHoveredRow(null)}
@@ -911,7 +951,8 @@ export function MonthlyView() {
                         className={cn(
                           "px-4 py-3 text-center font-bold text-lg border-b border-l-2 border-gray-200 transition-all duration-200",
                           "text-green-700 bg-green-50",
-                          hoveredRow === employee.id && 'bg-green-100'
+                          hoveredRow === employee.id && 'bg-green-100',
+                          shouldHighlight && 'bg-yellow-50 border-yellow-200'
                         )}
                         onMouseEnter={() => setHoveredRow(employee.id)}
                         onMouseLeave={() => setHoveredRow(null)}
@@ -922,7 +963,8 @@ export function MonthlyView() {
                         className={cn(
                           "px-4 py-3 text-center font-bold text-lg border-b border-gray-200 transition-all duration-200",
                           "text-red-700 bg-red-50",
-                          hoveredRow === employee.id && 'bg-red-100'
+                          hoveredRow === employee.id && 'bg-red-100',
+                          shouldHighlight && 'bg-yellow-50 border-yellow-200'
                         )}
                         onMouseEnter={() => setHoveredRow(employee.id)}
                         onMouseLeave={() => setHoveredRow(null)}
@@ -939,6 +981,7 @@ export function MonthlyView() {
                             className={cn(
                               "px-2 py-3 text-center text-lg font-bold border-b border-gray-200 transition-all duration-200 bg-yellow-50 flex items-center justify-center",
                               hoveredRow === employee.id && 'bg-yellow-100',
+                              shouldHighlight && 'bg-yellow-100 border-yellow-200',
                               count > 0 ? "text-yellow-900" : "text-gray-300"
                             )}
                             onMouseEnter={() => setHoveredRow(employee.id)}
@@ -959,6 +1002,7 @@ export function MonthlyView() {
                             className={cn(
                               "px-2 py-3 text-center text-lg font-bold border-b border-gray-200 transition-all duration-200 bg-purple-50 flex items-center justify-center",
                               hoveredRow === employee.id && 'bg-purple-100',
+                              shouldHighlight && 'bg-yellow-50 border-yellow-200',
                               count > 0 ? "text-purple-900" : "text-gray-300"
                             )}
                             onMouseEnter={() => setHoveredRow(employee.id)}
@@ -970,7 +1014,8 @@ export function MonthlyView() {
                         )
                       })}
                     </React.Fragment>
-                  ))}
+                  )
+                  })}
                 </React.Fragment>
               ))
             )}

@@ -115,6 +115,26 @@ export function YearlyView() {
             )
         }
 
+        // Filter employees based on their status during the selected year
+        // For yearly view, include all employees who were active at any point during the year
+        // or became inactive during the year
+        filteredEmployees = filteredEmployees.filter((employee: Employee) => {
+            // If employee is currently active, include them
+            if (employee.status === 'active') {
+                return true
+            }
+
+            // If employee is not active, check if they became inactive during this year
+            if (employee.exit_date) {
+                const exitDate = new Date(employee.exit_date)
+                // Include if exit date is within the year (they became inactive during this year)
+                return exitDate >= workingYearDates.start && exitDate <= workingYearDates.end
+            }
+
+            // If no exit_date but status is not active, exclude them
+            return false
+        })
+
         filteredEmployees.forEach((employee: Employee) => {
             const categoryName = employee.category?.name || 'Uncategorized'
             if (!grouped[categoryName]) {
@@ -145,7 +165,7 @@ export function YearlyView() {
             category,
             employees: grouped[category],
         }))
-    }, [employees, searchQuery])
+    }, [employees, searchQuery, workingYearDates.start, workingYearDates.end])
 
     const attendanceMap = useMemo(() => {
         const map: Record<string, Record<string, AttendanceRecord>> = {}
@@ -543,21 +563,40 @@ export function YearlyView() {
                                     {categoryEmployees.map((employee, index) => {
                                         const stats = employeeStatistics[employee.id]
                                         const isHovered = hoveredRow === employee.id
+                                        
+                                        // Check if employee should be highlighted (non-active during this year)
+                                        const isNonActive = employee.status !== 'active'
+                                        const exitDate = employee.exit_date ? new Date(employee.exit_date) : null
+                                        const becameInactiveThisYear = exitDate && exitDate >= workingYearDates.start && exitDate <= workingYearDates.end
+                                        const shouldHighlight = isNonActive && becameInactiveThisYear
+                                        
                                         return (
                                             <React.Fragment key={employee.id}>
                                                 {/* Employee Name */}
                                                 <div
                                                     className={cn(
-                                                        "sticky left-0 z-10 px-4 py-3 font-medium text-gray-900 border-b border-gray-200 transition-all duration-200",
+                                                        "sticky left-0 z-10 px-4 py-3 font-medium border-b border-gray-200 transition-all duration-200",
                                                         index % 2 === 0 ? 'bg-white' : 'bg-gray-50',
-                                                        isHovered && 'bg-blue-50'
+                                                        isHovered && 'bg-blue-50',
+                                                        shouldHighlight && 'bg-yellow-100 border-yellow-300 border-l-4'
                                                     )}
                                                     onMouseEnter={() => setHoveredRow(employee.id)}
                                                     onMouseLeave={() => setHoveredRow(null)}
                                                 >
                                                     <div className="flex flex-col gap-1">
-                                                        <span className="text-sm font-bold text-[#23887C]">{employee.employee_id || '-'}</span>
-                                                        <span className="text-xs text-gray-600 truncate">{employee.name}</span>
+                                                        <span className={cn(
+                                                            "text-sm font-bold",
+                                                            shouldHighlight ? 'text-yellow-800' : 'text-[#23887C]'
+                                                        )}>
+                                                            {employee.employee_id || '-'}
+                                                        </span>
+                                                        <span className={cn(
+                                                            "text-xs truncate",
+                                                            shouldHighlight ? 'text-yellow-700 font-semibold' : 'text-gray-600'
+                                                        )}>
+                                                            {employee.name}
+                                                            {shouldHighlight && ` (${employee.status})`}
+                                                        </span>
                                                     </div>
                                                 </div>
 
@@ -566,7 +605,8 @@ export function YearlyView() {
                                                     className={cn(
                                                         "px-4 py-3 text-center text-lg font-bold border-b border-l-2 border-gray-200 transition-all duration-200",
                                                         "text-green-700 bg-green-50",
-                                                        isHovered && 'bg-green-100'
+                                                        isHovered && 'bg-green-100',
+                                                        shouldHighlight && 'bg-yellow-50 border-yellow-200'
                                                     )}
                                                     onMouseEnter={() => setHoveredRow(employee.id)}
                                                     onMouseLeave={() => setHoveredRow(null)}
@@ -579,7 +619,8 @@ export function YearlyView() {
                                                     className={cn(
                                                         "px-4 py-3 text-center text-lg font-bold border-b border-gray-200 transition-all duration-200",
                                                         "text-red-700 bg-red-50",
-                                                        isHovered && 'bg-red-100'
+                                                        isHovered && 'bg-red-100',
+                                                        shouldHighlight && 'bg-yellow-50 border-yellow-200'
                                                     )}
                                                     onMouseEnter={() => setHoveredRow(employee.id)}
                                                     onMouseLeave={() => setHoveredRow(null)}
@@ -596,6 +637,7 @@ export function YearlyView() {
                                                             className={cn(
                                                                 "px-2 py-3 text-center text-lg font-bold border-b border-gray-200 transition-all duration-200 bg-yellow-50 flex items-center justify-center",
                                                                 isHovered && 'bg-yellow-100',
+                                                                shouldHighlight && 'bg-yellow-100 border-yellow-200',
                                                                 count > 0 ? "text-yellow-900" : "text-gray-300"
                                                             )}
                                                             onMouseEnter={() => setHoveredRow(employee.id)}
@@ -616,6 +658,7 @@ export function YearlyView() {
                                                             className={cn(
                                                                 "px-2 py-3 text-center text-lg font-bold border-b border-gray-200 transition-all duration-200 bg-purple-50 flex items-center justify-center",
                                                                 isHovered && 'bg-purple-100',
+                                                                shouldHighlight && 'bg-yellow-50 border-yellow-200',
                                                                 count > 0 ? "text-purple-900" : "text-gray-300"
                                                             )}
                                                             onMouseEnter={() => setHoveredRow(employee.id)}
