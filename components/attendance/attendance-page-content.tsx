@@ -13,7 +13,8 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover'
-import { Calendar, ChevronLeft, ChevronRight, Save, RotateCcw, CheckCircle2, XCircle, CalendarDays, Building2, Wrench, Search, X } from 'lucide-react'
+import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Save, RotateCcw, CheckCircle2, XCircle, CalendarDays, Building2, Wrench, Search, X } from 'lucide-react'
+import { Calendar } from '@/components/ui/calendar'
 import { format, addDays } from 'date-fns'
 import { useDebounce } from '@/lib/hooks/useDebounce'
 
@@ -79,6 +80,9 @@ export function AttendancePageContent() {
   const [selectedLeaveType, setSelectedLeaveType] = useState<Record<string, string>>({})
   const [selectedWorkSite, setSelectedWorkSite] = useState<Record<string, string>>({})
   const [openPopovers, setOpenPopovers] = useState<Record<string, string>>({})
+  /** For leave popover: dates selected on calendar for bulk leave (keyed by employee.id) */
+  const [leaveCalendarDates, setLeaveCalendarDates] = useState<Record<string, Date[]>>({})
+  const [leaveBulkSaving, setLeaveBulkSaving] = useState(false)
 
   const debouncedSearch = useDebounce(searchQuery, 300)
 
@@ -249,6 +253,38 @@ export function AttendancePageContent() {
     })
   }
 
+  /** Apply leave to all dates selected in the leave calendar for an employee. */
+  const handleApplyLeaveToDates = async (employeeId: string, leaveTypeId: string, dates: Date[]) => {
+    if (!leaveTypeId || dates.length === 0) return
+    setLeaveBulkSaving(true)
+    try {
+      for (const date of dates) {
+        const dateStr = format(date, 'yyyy-MM-dd')
+        await AttendanceService.saveAttendance(employeeId, dateStr, 'leave', leaveTypeId, undefined)
+      }
+      setSelectedLeaveType(prev => ({ ...prev, [employeeId]: leaveTypeId }))
+      setLeaveCalendarDates(prev => {
+        const next = { ...prev }
+        delete next[employeeId]
+        return next
+      })
+      setOpenPopovers(prev => ({ ...prev, [`leave-${employeeId}`]: 'closed' }))
+      await fetchAttendance(selectedDate)
+    } catch (error) {
+      console.error('Error applying leave to dates:', error)
+      alert('Failed to mark leave for some dates. Please try again.')
+    } finally {
+      setLeaveBulkSaving(false)
+    }
+  }
+
+  const setLeaveDatesForEmployee = (employeeId: string, dates: Date[] | undefined) => {
+    setLeaveCalendarDates(prev => ({
+      ...prev,
+      [employeeId]: dates ?? [],
+    }))
+  }
+
   const handleClearAttendance = async (employeeId: string) => {
     if (!confirm('Are you sure you want to clear the attendance for this employee?')) {
       return
@@ -417,7 +453,7 @@ export function AttendancePageContent() {
             <ChevronLeft className="h-4 w-4" />
           </Button>
           <div className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-md min-w-[200px] justify-center">
-            <Calendar className="h-4 w-4 text-gray-500" />
+            <CalendarIcon className="h-4 w-4 text-gray-500" />
             <span className="text-sm font-medium text-gray-900">
               {format(selectedDate, 'PPP')}
             </span>
@@ -529,6 +565,12 @@ export function AttendancePageContent() {
                           <Popover
                             open={openPopovers[`leave-${employee.id}`] === 'open'}
                             onOpenChange={(open) => {
+                              if (open) {
+                                const current = leaveCalendarDates[employee.id]
+                                if (!current || current.length === 0) {
+                                  setLeaveCalendarDates(prev => ({ ...prev, [employee.id]: [selectedDate] }))
+                                }
+                              }
                               setOpenPopovers(prev => ({
                                 ...prev,
                                 [`leave-${employee.id}`]: open ? 'open' : 'closed',
@@ -545,13 +587,16 @@ export function AttendancePageContent() {
                                     : 'border-gray-300 text-gray-700 hover:bg-gray-50'
                                 }`}
                                 onClick={() => {
-                                  if (status !== 'leave') {
+                                  if (status === 'leave') {
+                                    handleStatusChange(employee.id, 'present')
+                                  } else {
                                     setOpenPopovers(prev => ({
                                       ...prev,
                                       [`leave-${employee.id}`]: 'open',
                                     }))
-                                  } else {
-                                    handleStatusChange(employee.id, 'present')
+                                    if (!leaveCalendarDates[employee.id]?.length) {
+                                      setLeaveCalendarDates(prev => ({ ...prev, [employee.id]: [selectedDate] }))
+                                    }
                                   }
                                 }}
                               >
@@ -559,72 +604,67 @@ export function AttendancePageContent() {
                                 Leave {leaveTypeName && `(${generateLeaveShortHand(leaveTypeName)})`}
                               </Button>
                             </PopoverTrigger>
-                            <PopoverContent className="w-64 p-0" align="start">
-                              <div className="p-2">
-                                <div className="text-sm font-semibold text-gray-900 mb-2 px-2 py-1">Select Leave Type</div>
-                                <div className="max-h-64 overflow-y-auto">
-                                  <button
-                                    onClick={async () => {
-                                      setSelectedLeaveType(prev => {
-                                        const updated = { ...prev }
-                                        delete updated[employee.id]
-                                        return updated
-                                      })
-                                      if (status === 'leave') {
-                                        await handleStatusChange(employee.id, 'present', undefined)
-                                      }
-                                      setOpenPopovers(prev => ({
-                                        ...prev,
-                                        [`leave-${employee.id}`]: 'closed',
-                                      }))
-                                    }}
-                                    className="w-full text-left px-3 py-2 text-sm rounded-md hover:bg-gray-100 transition-colors border-b border-gray-200 mb-1"
-                                  >
-                                    <div className="flex items-center gap-3">
-                                      <div className="h-8 w-8 rounded-md flex items-center justify-center font-semibold text-xs flex-shrink-0 bg-gray-200 text-gray-600">
-                                        -
-                                      </div>
-                                      <div className="flex-1 min-w-0">
-                                        <div className="font-medium text-gray-500">None</div>
-                                      </div>
-                                    </div>
-                                  </button>
-                                  {leaveTypes.length === 0 ? (
-                                    <div className="px-2 py-4 text-center text-sm text-gray-500">No leave types found</div>
-                                  ) : (
-                                    leaveTypes.map((leaveType) => {
-                                      const shorthand = generateLeaveShortHand(leaveType.name || '')
-                                      const colorClasses = getColorForInitials(shorthand)
-                                      return (
-                                        <button
-                                          key={leaveType.id}
-                                          onClick={async () => {
-                                            setSelectedLeaveType(prev => ({
-                                              ...prev,
-                                              [employee.id]: leaveType.id,
-                                            }))
-                                            await handleStatusChange(employee.id, 'leave', leaveType.id)
-                                            setOpenPopovers(prev => ({
-                                              ...prev,
-                                              [`leave-${employee.id}`]: 'closed',
-                                            }))
-                                          }}
-                                          className={`w-full text-left px-3 py-2 text-sm rounded-md hover:bg-gray-100 transition-colors ${
-                                            selectedLeaveType[employee.id] === leaveType.id ? 'bg-[#23887C]/10' : ''
-                                          }`}
-                                        >
-                                          <div className="flex items-center gap-3">
+                            <PopoverContent className="w-auto p-0 max-w-[90vw]" align="start">
+                              <div className="p-3 flex flex-col sm:flex-row gap-4">
+                                {/* Leave type + Calendar */}
+                                <div className="flex flex-col gap-3 min-w-[260px]">
+                                  <div className="text-sm font-semibold text-gray-900">Leave type</div>
+                                  <div className="max-h-44 overflow-y-auto space-y-0.5 border rounded-md p-1.5 bg-gray-50/50">
+                                    {leaveTypes.length === 0 ? (
+                                      <div className="px-2 py-3 text-center text-sm text-gray-500">No leave types found</div>
+                                    ) : (
+                                      leaveTypes.map((leaveType) => {
+                                        const shorthand = generateLeaveShortHand(leaveType.name || '')
+                                        const colorClasses = getColorForInitials(shorthand)
+                                        const isSelected = selectedLeaveType[employee.id] === leaveType.id
+                                        return (
+                                          <button
+                                            key={leaveType.id}
+                                            type="button"
+                                            onClick={() => setSelectedLeaveType(prev => ({ ...prev, [employee.id]: leaveType.id }))}
+                                            className={`w-full text-left px-3 py-2 text-sm rounded-md hover:bg-gray-100 transition-colors flex items-center gap-3 ${isSelected ? 'bg-[#23887C]/15 ring-1 ring-[#23887C]/40' : ''}`}
+                                          >
                                             <div className={`${colorClasses.bg} ${colorClasses.text} h-8 w-8 rounded-md flex items-center justify-center font-semibold text-xs flex-shrink-0`}>
                                               {shorthand}
                                             </div>
-                                            <div className="flex-1 min-w-0">
-                                              <div className="font-medium text-gray-900 truncate">{leaveType.name}</div>
-                                            </div>
-                                          </div>
-                                        </button>
-                                      )
-                                    })
-                                  )}
+                                            <span className="font-medium text-gray-900 truncate">{leaveType.name}</span>
+                                          </button>
+                                        )
+                                      })
+                                    )}
+                                  </div>
+                                </div>
+                                <div className="flex flex-col gap-2 border-l border-gray-200 pl-3">
+                                  <div className="text-sm font-semibold text-gray-900">Select dates</div>
+                                  <p className="text-xs text-gray-500">Click dates to mark leave. Multiple dates can be selected.</p>
+                                  <Calendar
+                                    mode="multiple"
+                                    selected={leaveCalendarDates[employee.id] ?? [selectedDate]}
+                                    onSelect={(dates) => setLeaveDatesForEmployee(employee.id, dates)}
+                                    defaultMonth={selectedDate}
+                                    numberOfMonths={2}
+                                    disabled={{ before: new Date(2000, 0, 1), after: new Date(2100, 0, 1) }}
+                                  />
+                                  <Button
+                                    size="sm"
+                                    className="mt-1 bg-[#23887C] hover:bg-[#1f7569]"
+                                    disabled={
+                                      leaveBulkSaving ||
+                                      !selectedLeaveType[employee.id] ||
+                                      !(leaveCalendarDates[employee.id]?.length)
+                                    }
+                                    onClick={() => {
+                                      const leaveTypeId = selectedLeaveType[employee.id]
+                                      const dates = leaveCalendarDates[employee.id]
+                                      if (leaveTypeId && dates?.length) {
+                                        handleApplyLeaveToDates(employee.id, leaveTypeId, dates)
+                                      }
+                                    }}
+                                  >
+                                    {leaveBulkSaving
+                                      ? 'Applying…'
+                                      : `Apply leave to ${(leaveCalendarDates[employee.id]?.length ?? 0)} date(s)`}
+                                  </Button>
                                 </div>
                               </div>
                             </PopoverContent>
