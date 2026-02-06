@@ -80,6 +80,8 @@ export class AttendanceService {
           status,
           leave_type_id,
           work_site_id,
+          time_in,
+          time_out,
           employee:employees(id, employee_id, name)
         `)
         .eq('date', date)
@@ -102,7 +104,9 @@ export class AttendanceService {
     date: string,
     status: 'present' | 'absent' | 'leave',
     leaveTypeId?: string | null,
-    workSiteId?: string | null
+    workSiteId?: string | null,
+    timeIn?: string | null,
+    timeOut?: string | null
   ) {
     try {
       const { data: existingRecords, error: checkError } = await supabase
@@ -121,6 +125,8 @@ export class AttendanceService {
         leave_type_id: status === 'leave' ? (leaveTypeId || null) : null,
         work_site_id: workSiteId || null,
       }
+      if (timeIn !== undefined) payload.time_in = timeIn || null
+      if (timeOut !== undefined) payload.time_out = timeOut || null
 
       if (existing && !checkError) {
         const { data, error } = await supabase
@@ -191,6 +197,71 @@ export class AttendanceService {
       return true
     } catch (error) {
       console.error('Error deleting attendance record:', error)
+      throw error
+    }
+  }
+
+  /** Fetch attendance for a single date with employee info for timesheet. */
+  static async getTimesheetByDate(date: string) {
+    try {
+      const { data, error } = await supabase
+        .from('attendance_records')
+        .select(`
+          id,
+          employee_id,
+          date,
+          status,
+          leave_type_id,
+          work_site_id,
+          time_in,
+          time_out
+        `)
+        .eq('date', date)
+        .order('employee_id', { ascending: true })
+
+      if (error) {
+        console.error('Error fetching timesheet by date:', error)
+        throw error
+      }
+
+      return data ?? []
+    } catch (error) {
+      console.error('Error fetching timesheet by date:', error)
+      throw error
+    }
+  }
+
+  /** Update time_in, time_out, and optionally work_site_id for an attendance record (admin timesheet edit). */
+  static async updateTimesheetRecord(
+    recordId: string,
+    updates: {
+      time_in?: string | null
+      time_out?: string | null
+      work_site_id?: string | null
+    }
+  ) {
+    try {
+      const payload: Record<string, unknown> = {}
+      if (updates.time_in !== undefined) payload.time_in = updates.time_in
+      if (updates.time_out !== undefined) payload.time_out = updates.time_out
+      if (updates.work_site_id !== undefined) payload.work_site_id = updates.work_site_id
+      if (Object.keys(payload).length === 0) return null
+
+      const { data, error } = await supabase
+        .from('attendance_records')
+        .update(payload)
+        .eq('id', recordId)
+        .select()
+        .single()
+
+      if (error) {
+        console.error('Error updating timesheet record:', error)
+        throw error
+      }
+
+      return data
+    } catch (error) {
+      console.error('Error updating timesheet record:', error)
       throw error
     }
   }

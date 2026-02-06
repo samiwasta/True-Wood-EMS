@@ -6,7 +6,7 @@ import { YearlyView } from '@/components/reports/yearly-view'
 
 export default function ReportsPage() {
   return (
-    <div className="w-full flex flex-col gap-4 w-full max-w-full h-full overflow-x-hidden overflow-y-auto">
+    <div className="w-full flex flex-col gap-4 max-w-full h-full overflow-x-hidden overflow-y-auto">
       <div className="flex items-center justify-between gap-4 flex-shrink-0 min-w-0">
         <div className="flex flex-col gap-1 min-w-0">
           <h1 className="text-2xl font-bold text-gray-900">Attendance Reports</h1>

@@ -1,6 +1,6 @@
 "use client"
 
-import { LayoutDashboard, Users, CalendarCheck, FileText, Building2, Settings, Building } from "lucide-react"
+import { LayoutDashboard, Users, CalendarCheck, Clock, FileText, Building2, Settings, Building } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 
@@ -32,6 +32,11 @@ const items = [
     title: "Attendance",
     url: "/attendance",
     icon: CalendarCheck,
+  },
+  {
+    title: "Timesheet",
+    url: "/timesheet",
+    icon: Clock,
   },
   {
     title: "Reports",

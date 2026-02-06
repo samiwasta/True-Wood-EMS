@@ -33,7 +33,7 @@ export default function RootLayout({
         <SidebarProvider>
           <AppSidebar />
           <SidebarInset>
-            <div className="flex flex-1 flex-col gap-4 p-4 overflow-x-hidden overflow-y-auto">
+            <div className="flex min-h-0 flex-1 flex-col gap-4 p-4 overflow-x-hidden overflow-y-auto">
               {children}
             </div>
           </SidebarInset>
