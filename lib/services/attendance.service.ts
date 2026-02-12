@@ -231,6 +231,54 @@ export class AttendanceService {
     }
   }
 
+  /** Fetch attendance records for a date range (flat, for monthly timesheet). */
+  static async getTimesheetByDateRange(startDate: string, endDate: string) {
+    try {
+      const allRecords: Array<{
+        id: string
+        employee_id: string
+        date: string
+        status: 'present' | 'absent' | 'leave'
+        leave_type_id?: string | null
+        work_site_id?: string | null
+        time_in?: string | null
+        time_out?: string | null
+      }> = []
+      let offset = 0
+      const pageSize = 1000
+      let hasMore = true
+
+      while (hasMore) {
+        const { data, error } = await supabase
+          .from('attendance_records')
+          .select('id, employee_id, date, status, leave_type_id, work_site_id, time_in, time_out')
+          .gte('date', startDate)
+          .lte('date', endDate)
+          .order('date', { ascending: true })
+          .order('employee_id', { ascending: true })
+          .range(offset, offset + pageSize - 1)
+
+        if (error) {
+          console.error('Error fetching timesheet by date range:', error)
+          throw error
+        }
+
+        if (data && data.length > 0) {
+          allRecords.push(...(data as typeof allRecords))
+          offset += pageSize
+          hasMore = data.length === pageSize
+        } else {
+          hasMore = false
+        }
+      }
+
+      return allRecords
+    } catch (error) {
+      console.error('Error fetching timesheet by date range:', error)
+      throw error
+    }
+  }
+
   /** Update time_in, time_out, and optionally work_site_id for an attendance record (admin timesheet edit). */
   static async updateTimesheetRecord(
     recordId: string,

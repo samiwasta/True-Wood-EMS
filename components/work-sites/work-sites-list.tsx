@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useWorkSites, WorkSite } from '@/lib/hooks/useWorkSites'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Building2, Plus, Edit2, Trash2, MapPin, AlertTriangle, CalendarIcon } from 'lucide-react'
+import { Building2, Plus, Edit2, Trash2, MapPin, AlertTriangle, CalendarIcon, Clock } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -18,6 +18,7 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Calendar } from '@/components/ui/calendar'
 import { format } from 'date-fns'
+import { WorkSiteService } from '@/lib/services/work-site.service'
 
 const getInitials = (name: string, shortHand?: string): string => {
   if (shortHand && shortHand.trim()) {
@@ -62,8 +63,13 @@ export function WorkSitesList() {
   const [endDate, setEndDate] = useState<Date | undefined>(undefined)
   const [timeIn, setTimeIn] = useState('')
   const [timeOut, setTimeOut] = useState('')
+  const [breakHours, setBreakHours] = useState('')
   const [editingWorkSite, setEditingWorkSite] = useState<WorkSite | null>(null)
   const [deletingWorkSite, setDeletingWorkSite] = useState<WorkSite | null>(null)
+  const [historyWorkSite, setHistoryWorkSite] = useState<WorkSite | null>(null)
+  const [isHistoryDialogOpen, setIsHistoryDialogOpen] = useState(false)
+  const [timeHistory, setTimeHistory] = useState<Array<{ effective_from: string; time_in: string | null; time_out: string | null; break_hours: number | null; created_at: string }>>([])
+  const [historyLoading, setHistoryLoading] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showStartCalendar, setShowStartCalendar] = useState(false)
   const [showEndCalendar, setShowEndCalendar] = useState(false)
@@ -104,7 +110,8 @@ export function WorkSitesList() {
         startDate ? format(startDate, 'yyyy-MM-dd') : undefined,
         endDate ? format(endDate, 'yyyy-MM-dd') : undefined,
         timeIn || undefined,
-        timeOut || undefined
+        timeOut || undefined,
+        breakHours.trim() ? parseFloat(breakHours) : undefined
       )
       
       // Reset form and close dialog
@@ -116,6 +123,7 @@ export function WorkSitesList() {
       setEndDate(undefined)
       setTimeIn('')
       setTimeOut('')
+      setBreakHours('')
       setIsAddDialogOpen(false)
     } catch (error) {
       console.error('Error adding work site:', error)
@@ -144,7 +152,8 @@ export function WorkSitesList() {
         startDate ? format(startDate, 'yyyy-MM-dd') : undefined,
         endDate ? format(endDate, 'yyyy-MM-dd') : undefined,
         timeIn || undefined,
-        timeOut || undefined
+        timeOut || undefined,
+        breakHours.trim() ? parseFloat(breakHours) : undefined
       )
       
       // Reset form and close dialog
@@ -156,6 +165,7 @@ export function WorkSitesList() {
       setEndDate(undefined)
       setTimeIn('')
       setTimeOut('')
+      setBreakHours('')
       setEditingWorkSite(null)
       setIsEditDialogOpen(false)
     } catch (error) {
@@ -197,6 +207,7 @@ export function WorkSitesList() {
       setEndDate(undefined)
       setTimeIn('')
       setTimeOut('')
+      setBreakHours('')
       setShowStartCalendar(false)
       setShowEndCalendar(false)
     }
@@ -212,6 +223,7 @@ export function WorkSitesList() {
     setEndDate(workSite.end_date ? new Date(workSite.end_date) : undefined)
     setTimeIn(workSite.time_in || '')
     setTimeOut(workSite.time_out || '')
+    setBreakHours(workSite.break_hours != null ? String(workSite.break_hours) : '')
     setIsEditDialogOpen(true)
   }
 
@@ -226,6 +238,7 @@ export function WorkSitesList() {
       setEndDate(undefined)
       setTimeIn('')
       setTimeOut('')
+      setBreakHours('')
       setEditingWorkSite(null)
       setShowStartCalendar(false)
       setShowEndCalendar(false)
@@ -243,6 +256,19 @@ export function WorkSitesList() {
       setDeletingWorkSite(null)
     }
   }
+
+  const handleHistoryClick = (workSite: WorkSite) => {
+    setHistoryWorkSite(workSite)
+    setIsHistoryDialogOpen(true)
+  }
+
+  useEffect(() => {
+    if (!isHistoryDialogOpen || !historyWorkSite) return
+    setHistoryLoading(true)
+    WorkSiteService.getWorkSiteTimeHistory(historyWorkSite.id)
+      .then(setTimeHistory)
+      .finally(() => setHistoryLoading(false))
+  }, [isHistoryDialogOpen, historyWorkSite?.id])
 
   const formatDate = (dateString: string) => {
     try {
@@ -479,6 +505,26 @@ export function WorkSitesList() {
                   />
                 </div>
               </div>
+              <div className="space-y-2">
+                <label 
+                  htmlFor="break-hours" 
+                  className="text-sm font-medium text-gray-700 block"
+                >
+                  Break hours <span className="text-gray-400 text-xs">(Optional)</span>
+                </label>
+                <Input
+                  id="break-hours"
+                  type="number"
+                  min={0}
+                  step={0.5}
+                  placeholder="e.g. 1 or 1.5"
+                  value={breakHours}
+                  onChange={(e) => setBreakHours(e.target.value)}
+                  className="h-11 border-gray-300 focus:border-[#23887C] focus:ring-[#23887C] focus:ring-1 transition-all duration-200"
+                  disabled={isSubmitting}
+                />
+                <p className="text-xs text-gray-400 mt-1">Duration in hours (e.g. 1 for 1 hour, 1.5 for 1h 30m)</p>
+              </div>
               <DialogFooter className="gap-3">
                 <Button
                   type="button"
@@ -548,17 +594,28 @@ export function WorkSitesList() {
                   <div className="flex items-center gap-1">
                     <Button
                       variant="ghost"
-                      size="icon-sm"
+                      size="icon"
+                      className="h-8 w-8 text-gray-600 hover:text-gray-700 hover:bg-gray-100"
+                      onClick={() => handleHistoryClick(workSite)}
+                      title="View time history"
+                    >
+                      <Clock className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
                       className="h-8 w-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
                       onClick={() => handleEditClick(workSite)}
+                      title="Edit"
                     >
                       <Edit2 className="h-4 w-4" />
                     </Button>
                     <Button
                       variant="ghost"
-                      size="icon-sm"
+                      size="icon"
                       className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50"
                       onClick={() => handleDeleteClick(workSite)}
+                      title="Delete"
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
@@ -784,6 +841,25 @@ export function WorkSitesList() {
                 />
               </div>
             </div>
+            <div className="space-y-2">
+              <label 
+                htmlFor="edit-break-hours" 
+                className="text-sm font-medium text-gray-700 block"
+              >
+                Break hours <span className="text-gray-400 text-xs">(Optional)</span>
+              </label>
+              <Input
+                id="edit-break-hours"
+                type="number"
+                min={0}
+                step={0.5}
+                placeholder="e.g. 1 or 1.5"
+                value={breakHours}
+                onChange={(e) => setBreakHours(e.target.value)}
+                className="h-11 border-gray-300 focus:border-[#23887C] focus:ring-[#23887C] focus:ring-1 transition-all duration-200"
+                disabled={isSubmitting}
+              />
+            </div>
             <DialogFooter className="gap-3">
               <Button
                 type="button"
@@ -812,6 +888,69 @@ export function WorkSitesList() {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Time History Dialog */}
+      <Dialog
+        open={isHistoryDialogOpen}
+        onOpenChange={(open) => {
+          setIsHistoryDialogOpen(open)
+          if (!open) setHistoryWorkSite(null)
+        }}
+      >
+        <DialogContent className="sm:max-w-[480px]">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-semibold text-gray-900 flex items-center gap-2">
+              <Clock className="h-5 w-5 text-[#23887C]" />
+              Time history
+            </DialogTitle>
+            <DialogDescription className="text-gray-500 pt-1">
+              {historyWorkSite ? (
+                <>Start/end times for <span className="font-medium text-gray-700">{historyWorkSite.name}</span>. Used for overtime on past dates.</>
+              ) : null}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-2">
+            {historyLoading ? (
+              <div className="flex items-center justify-center py-8 text-gray-500">
+                <div className="h-6 w-6 border-2 border-[#23887C] border-t-transparent rounded-full animate-spin" />
+                <span className="ml-2">Loading...</span>
+              </div>
+            ) : (
+              <div className="border border-gray-200 rounded-lg overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 border-b border-gray-200">
+                    <tr>
+                      <th className="text-left font-semibold text-gray-700 px-4 py-3">Effective from</th>
+                      <th className="text-left font-semibold text-gray-700 px-4 py-3">Time in</th>
+                      <th className="text-left font-semibold text-gray-700 px-4 py-3">Time out</th>
+                      <th className="text-left font-semibold text-gray-700 px-4 py-3">Break (hrs)</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {historyWorkSite && timeHistory.length === 0 ? (
+                      <tr>
+                        <td colSpan={4} className="px-4 py-6 text-center text-gray-500">
+                          No history yet. Current: {historyWorkSite.time_in || '—'} / {historyWorkSite.time_out || '—'}
+                          {historyWorkSite.break_hours != null ? `, ${historyWorkSite.break_hours}h break` : ''}
+                        </td>
+                      </tr>
+                    ) : (
+                      timeHistory.map((row, i) => (
+                        <tr key={i} className="hover:bg-gray-50/50">
+                          <td className="px-4 py-2.5 font-medium text-gray-900">{formatDate(row.effective_from)}</td>
+                          <td className="px-4 py-2.5 text-gray-700">{row.time_in || '—'}</td>
+                          <td className="px-4 py-2.5 text-gray-700">{row.time_out || '—'}</td>
+                          <td className="px-4 py-2.5 text-gray-700">{row.break_hours != null ? `${row.break_hours}` : '—'}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         </DialogContent>
       </Dialog>
 

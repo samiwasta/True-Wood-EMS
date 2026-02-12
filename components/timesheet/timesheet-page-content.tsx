@@ -5,6 +5,7 @@ import { useEmployees, Employee } from '@/lib/hooks/useEmployees'
 import { useCategories } from '@/lib/hooks/useCategories'
 import { useWorkSites, WorkSite } from '@/lib/hooks/useWorkSites'
 import { AttendanceService } from '@/lib/services/attendance.service'
+import { WorkSiteService } from '@/lib/services/work-site.service'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -14,10 +15,14 @@ import {
   ChevronLeft,
   ChevronRight,
   Edit2,
+  Eye,
+  FileDown,
   Search,
   X,
 } from 'lucide-react'
-import { format } from 'date-fns'
+import { format, eachDayOfInterval } from 'date-fns'
+import jsPDF from 'jspdf'
+import autoTable from 'jspdf-autotable'
 import {
   Table,
   TableBody,
@@ -46,6 +51,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useDebounce } from '@/lib/hooks/useDebounce'
 
 // ─── Constants ───────────────────────────────────────────────────────
@@ -96,21 +103,28 @@ function calculateOvertimeMinutes(
   timeIn: string | null | undefined,
   timeOut: string | null | undefined,
   expectedStartTime: string | null | undefined,
-  expectedEndTime: string | null | undefined
+  expectedEndTime: string | null | undefined,
+  breakHoursActual: number = 0,
+  breakHoursExpected: number = 0
 ): number | null {
   const inM = parseTimeToMinutes(timeIn)
   const outM = parseTimeToMinutes(timeOut)
   const expStartM = parseTimeToMinutes(expectedStartTime)
   const expEndM = parseTimeToMinutes(expectedEndTime)
   if (inM == null || outM == null) return null
-  const actualDuration = outM - inM
-  if (actualDuration <= 0) return 0
+  const actualDurationMins = outM - inM
+  if (actualDurationMins <= 0) return 0
+  const breakMinsActual = breakHoursActual * 60
+  const actualWorkingMins = Math.max(0, actualDurationMins - breakMinsActual)
+
   const expectedDuration =
     expStartM != null && expEndM != null && expEndM > expStartM
       ? expEndM - expStartM
       : null
   if (expectedDuration == null) return null
-  return Math.max(0, actualDuration - expectedDuration)
+  const breakMinsExpected = breakHoursExpected * 60
+  const expectedWorkingMins = Math.max(0, expectedDuration - breakMinsExpected)
+  return Math.max(0, actualWorkingMins - expectedWorkingMins)
 }
 
 // ─── Types ───────────────────────────────────────────────────────────
@@ -147,13 +161,33 @@ export function TimesheetPageContent() {
   const [editTimeOut, setEditTimeOut] = useState('')
   const [editProjectId, setEditProjectId] = useState<string>('__none__')
   const [editSaving, setEditSaving] = useState(false)
+  /** Project times effective on selected date (for correct overtime). */
+  const [workSiteTimesOnDate, setWorkSiteTimesOnDate] = useState<
+    Record<string, { time_in: string | null; time_out: string | null; break_hours: number | null }>
+  >({})
+
+  // Monthly tab state
+  const [activeTab, setActiveTab] = useState<'daily' | 'monthly'>('daily')
+  const [selectedMonth, setSelectedMonth] = useState<Date>(() => {
+    const d = new Date()
+    d.setDate(1)
+    return d
+  })
+  const [recordsInRange, setRecordsInRange] = useState<TimesheetRecord[]>([])
+  const [workSiteTimesByDate, setWorkSiteTimesByDate] = useState<
+    Record<string, Record<string, { time_in: string | null; time_out: string | null; break_hours: number | null }>>
+  >({})
+  const [loadingMonthly, setLoadingMonthly] = useState(false)
+  const [viewDialogOpen, setViewDialogOpen] = useState(false)
+  const [viewEmployee, setViewEmployee] = useState<Employee | null>(null)
+  const [pdfDownloadingId, setPdfDownloadingId] = useState<string | null>(null)
 
   // ─── Lookup maps ──────────────────────────────────────────────────
 
   const categoryMap = useMemo(() => {
-    const m: Record<string, { name?: string; time_in?: string; time_out?: string }> = {}
+    const m: Record<string, { name?: string; time_in?: string; time_out?: string; break_hours?: number | null }> = {}
     categories.forEach((c) => {
-      if (c.id) m[c.id] = { name: c.name, time_in: c.time_in, time_out: c.time_out }
+      if (c.id) m[c.id] = { name: c.name, time_in: c.time_in, time_out: c.time_out, break_hours: c.break_hours ?? null }
     })
     return m
   }, [categories])
@@ -195,6 +229,61 @@ export function TimesheetPageContent() {
   useEffect(() => {
     fetchTimesheet(selectedDate)
   }, [selectedDate])
+
+  useEffect(() => {
+    const dateStr = format(selectedDate, 'yyyy-MM-dd')
+    WorkSiteService.getWorkSiteTimesForAllSitesOnDate(dateStr).then(setWorkSiteTimesOnDate)
+  }, [selectedDate])
+
+  // ─── Monthly: working month 26th to 25th ──────────────────────────
+
+  /** Working month: from 26th of previous calendar month to 25th of selected month. */
+  const workingMonthStart = useMemo(() => {
+    const d = new Date(selectedMonth.getFullYear(), selectedMonth.getMonth(), 1)
+    d.setMonth(d.getMonth() - 1)
+    d.setDate(26)
+    return d
+  }, [selectedMonth])
+  const workingMonthEnd = useMemo(() => {
+    const d = new Date(selectedMonth.getFullYear(), selectedMonth.getMonth(), 25)
+    return d
+  }, [selectedMonth])
+  /** All dates in the working month (for full view and fetch). */
+  const workingMonthDates = useMemo(
+    () =>
+      eachDayOfInterval({ start: workingMonthStart, end: workingMonthEnd }).map((d) =>
+        format(d, 'yyyy-MM-dd')
+      ),
+    [workingMonthStart, workingMonthEnd]
+  )
+
+  useEffect(() => {
+    if (activeTab !== 'monthly') return
+    setLoadingMonthly(true)
+    const startStr = format(workingMonthStart, 'yyyy-MM-dd')
+    const endStr = format(workingMonthEnd, 'yyyy-MM-dd')
+    const dates = workingMonthDates
+    Promise.all([
+      AttendanceService.getTimesheetByDateRange(startStr, endStr),
+      ...dates.map((d) =>
+        WorkSiteService.getWorkSiteTimesForAllSitesOnDate(d).then((times) => ({ date: d, times }))
+      ),
+    ])
+      .then(([recs, ...dateTimes]) => {
+        setRecordsInRange((recs as TimesheetRecord[]) || [])
+        const byDate: typeof workSiteTimesByDate = {}
+        dateTimes.forEach(({ date, times }) => {
+          byDate[date] = times
+        })
+        setWorkSiteTimesByDate(byDate)
+      })
+      .catch((err) => {
+        console.error('Error fetching monthly timesheet:', err)
+        setRecordsInRange([])
+        setWorkSiteTimesByDate({})
+      })
+      .finally(() => setLoadingMonthly(false))
+  }, [activeTab, workingMonthStart, workingMonthEnd, workingMonthDates])
 
   // ─── Grouping ─────────────────────────────────────────────────────
 
@@ -241,12 +330,12 @@ export function TimesheetPageContent() {
 
   const getDefaultTimeIn = (employee: Employee, record: TimesheetRecord | undefined) => {
     if (record?.time_in) return record.time_in
-    // From project (work_site)
     if (record?.work_site_id) {
+      const times = workSiteTimesOnDate[record.work_site_id]
+      if (times?.time_in) return times.time_in
       const ws = workSiteMap[record.work_site_id]
       if (ws?.time_in) return ws.time_in
     }
-    // From category
     const catId = employee.category_id || employee.category?.id
     const cat = catId ? categoryMap[catId] : null
     return cat?.time_in ?? ''
@@ -254,12 +343,12 @@ export function TimesheetPageContent() {
 
   const getDefaultTimeOut = (employee: Employee, record: TimesheetRecord | undefined) => {
     if (record?.time_out) return record.time_out
-    // From project (work_site)
     if (record?.work_site_id) {
+      const times = workSiteTimesOnDate[record.work_site_id]
+      if (times?.time_out) return times.time_out
       const ws = workSiteMap[record.work_site_id]
       if (ws?.time_out) return ws.time_out
     }
-    // From category
     const catId = employee.category_id || employee.category?.id
     const cat = catId ? categoryMap[catId] : null
     return cat?.time_out ?? ''
@@ -267,6 +356,8 @@ export function TimesheetPageContent() {
 
   const getExpectedStartTime = (employee: Employee, record: TimesheetRecord | undefined) => {
     if (record?.work_site_id) {
+      const times = workSiteTimesOnDate[record.work_site_id]
+      if (times?.time_in) return times.time_in
       const ws = workSiteMap[record.work_site_id]
       if (ws?.time_in) return ws.time_in
     }
@@ -277,6 +368,8 @@ export function TimesheetPageContent() {
 
   const getExpectedEndTime = (employee: Employee, record: TimesheetRecord | undefined) => {
     if (record?.work_site_id) {
+      const times = workSiteTimesOnDate[record.work_site_id]
+      if (times?.time_out) return times.time_out
       const ws = workSiteMap[record.work_site_id]
       if (ws?.time_out) return ws.time_out
     }
@@ -285,10 +378,93 @@ export function TimesheetPageContent() {
     return cat?.time_out ?? null
   }
 
-  const getProjectDisplay = (record: TimesheetRecord | undefined) => {
-    if (!record?.work_site_id) return '-'
-    const ws = workSiteMap[record.work_site_id]
-    return ws ? ws.short_hand || ws.name : '-'
+  /** Break hours for display and overtime: from work site (on date) or category. */
+  const getBreakHours = (employee: Employee, record: TimesheetRecord | undefined): number => {
+    if (record?.work_site_id) {
+      const times = workSiteTimesOnDate[record.work_site_id]
+      if (times?.break_hours != null) return times.break_hours
+      const ws = workSiteMap[record.work_site_id]
+      if (ws?.break_hours != null) return ws.break_hours
+    }
+    const catId = employee.category_id || employee.category?.id
+    const cat = catId ? categoryMap[catId] : null
+    return cat?.break_hours ?? 0
+  }
+
+  /** Break hours for a record on a specific date (monthly view uses workSiteTimesByDate). */
+  const getBreakHoursForDate = (
+    employee: Employee,
+    record: TimesheetRecord,
+    dateStr: string
+  ): number => {
+    const byDate = workSiteTimesByDate[dateStr]
+    if (record.work_site_id && byDate?.[record.work_site_id]?.break_hours != null)
+      return byDate[record.work_site_id].break_hours!
+    if (record.work_site_id) {
+      const ws = workSiteMap[record.work_site_id]
+      if (ws?.break_hours != null) return ws.break_hours
+    }
+    const catId = employee.category_id || employee.category?.id
+    const cat = catId ? categoryMap[catId] : null
+    return cat?.break_hours ?? 0
+  }
+
+  /** Expected start/end for a record on a specific date (monthly view). */
+  const getExpectedStartForDate = (
+    employee: Employee,
+    record: TimesheetRecord,
+    dateStr: string
+  ): string | null => {
+    const byDate = workSiteTimesByDate[dateStr]
+    if (record.work_site_id && byDate?.[record.work_site_id]?.time_in != null)
+      return byDate[record.work_site_id].time_in
+    if (record.work_site_id) {
+      const ws = workSiteMap[record.work_site_id]
+      if (ws?.time_in) return ws.time_in
+    }
+    const catId = employee.category_id || employee.category?.id
+    const cat = catId ? categoryMap[catId] : null
+    return cat?.time_in ?? null
+  }
+
+  const getExpectedEndForDate = (
+    employee: Employee,
+    record: TimesheetRecord,
+    dateStr: string
+  ): string | null => {
+    const byDate = workSiteTimesByDate[dateStr]
+    if (record.work_site_id && byDate?.[record.work_site_id]?.time_out != null)
+      return byDate[record.work_site_id].time_out
+    if (record.work_site_id) {
+      const ws = workSiteMap[record.work_site_id]
+      if (ws?.time_out) return ws.time_out
+    }
+    const catId = employee.category_id || employee.category?.id
+    const cat = catId ? categoryMap[catId] : null
+    return cat?.time_out ?? null
+  }
+
+  /** Default time in/out for a record (monthly: from record or work site/category for that date). */
+  const getTimeInForRecord = (employee: Employee, record: TimesheetRecord, dateStr: string): string => {
+    if (record.time_in) return record.time_in
+    const byDate = workSiteTimesByDate[dateStr]
+    if (record.work_site_id && byDate?.[record.work_site_id]?.time_in) return byDate[record.work_site_id].time_in!
+    if (record.work_site_id && workSiteMap[record.work_site_id]?.time_in)
+      return workSiteMap[record.work_site_id].time_in!
+    const catId = employee.category_id || employee.category?.id
+    const cat = catId ? categoryMap[catId] : null
+    return cat?.time_in ?? ''
+  }
+
+  const getTimeOutForRecord = (employee: Employee, record: TimesheetRecord, dateStr: string): string => {
+    if (record.time_out) return record.time_out
+    const byDate = workSiteTimesByDate[dateStr]
+    if (record.work_site_id && byDate?.[record.work_site_id]?.time_out) return byDate[record.work_site_id].time_out!
+    if (record.work_site_id && workSiteMap[record.work_site_id]?.time_out)
+      return workSiteMap[record.work_site_id].time_out!
+    const catId = employee.category_id || employee.category?.id
+    const cat = catId ? categoryMap[catId] : null
+    return cat?.time_out ?? ''
   }
 
   // ─── Edit dialog ──────────────────────────────────────────────────
@@ -335,6 +511,137 @@ export function TimesheetPageContent() {
     setSelectedDate(d)
   }
 
+  // ─── Monthly: view dialog & PDF ────────────────────────────────────
+
+  const openViewDialog = (employee: Employee) => {
+    setViewEmployee(employee)
+    setViewDialogOpen(true)
+  }
+
+  /** Monthly tab: employees grouped by category (same order as daily). */
+  const monthlyGroupedByCategory = useMemo(() => {
+    const filtered = employees.filter((e) => {
+      if (e.status !== 'active') return false
+      if (!debouncedSearch.trim()) return true
+      const q = debouncedSearch.toLowerCase()
+      return (
+        (e.employee_id || '').toLowerCase().includes(q) ||
+        (e.name || '').toLowerCase().includes(q)
+      )
+    })
+    const grouped: Record<string, Employee[]> = {}
+    filtered.forEach((emp) => {
+      const cat = emp.category?.name || 'Uncategorized'
+      if (!grouped[cat]) grouped[cat] = []
+      grouped[cat].push(emp)
+    })
+    Object.keys(grouped).forEach((cat) => {
+      grouped[cat].sort((a, b) =>
+        (a.employee_id || '').localeCompare(b.employee_id || '', undefined, {
+          numeric: true,
+          sensitivity: 'base',
+        })
+      )
+    })
+    const order = (a: string, b: string) => {
+      const oa = getCategoryOrder(a)
+      const ob = getCategoryOrder(b)
+      if (oa !== 999 && ob !== 999) return oa - ob
+      if (oa !== 999) return -1
+      if (ob !== 999) return 1
+      return a.localeCompare(b, undefined, { sensitivity: 'base' })
+    }
+    return Object.keys(grouped)
+      .sort(order)
+      .map((category) => ({ category, employees: grouped[category] }))
+  }, [employees, debouncedSearch])
+
+  /** One row per date in working month; no record = dashes / Not Marked. */
+  const getMonthlyRowsForEmployee = (employeeId: string) => {
+    const emp = employees.find((e) => e.id === employeeId)
+    if (!emp) return []
+    const recordsByDate = new Map<string, TimesheetRecord>()
+    recordsInRange
+      .filter((r) => r.employee_id === employeeId)
+      .forEach((r) => recordsByDate.set(r.date, r))
+
+    return workingMonthDates.map((dateStr) => {
+      const record = recordsByDate.get(dateStr)
+      if (!record) {
+        return {
+          date: dateStr,
+          dateFormatted: format(new Date(dateStr + 'T12:00:00'), 'dd MMM yyyy'),
+          timeIn: '-',
+          timeOut: '-',
+          breakHours: '-',
+          overtime: '-',
+          status: 'Not Marked',
+        }
+      }
+      const timeIn = getTimeInForRecord(emp, record, dateStr)
+      const timeOut = getTimeOutForRecord(emp, record, dateStr)
+      const breakHrs = getBreakHoursForDate(emp, record, dateStr)
+      const expStart = getExpectedStartForDate(emp, record, dateStr)
+      const expEnd = getExpectedEndForDate(emp, record, dateStr)
+      const overtimeMins =
+        record.status === 'present'
+          ? calculateOvertimeMinutes(timeIn, timeOut, expStart, expEnd, breakHrs, breakHrs)
+          : null
+      const overtimeStr =
+        overtimeMins != null && overtimeMins > 0 ? formatMinutesToTime(overtimeMins) : '-'
+      const breakDisplay = breakHrs > 0 ? (breakHrs % 1 === 0 ? String(breakHrs) : String(breakHrs)) : '-'
+      return {
+        date: dateStr,
+        dateFormatted: format(new Date(dateStr + 'T12:00:00'), 'dd MMM yyyy'),
+        timeIn: timeIn ? toHHmm(timeIn) : '-',
+        timeOut: timeOut ? toHHmm(timeOut) : '-',
+        breakHours: breakDisplay,
+        overtime: overtimeStr,
+        status: record.status,
+      }
+    })
+  }
+
+  const handleDownloadPdf = async (employee: Employee) => {
+    setPdfDownloadingId(employee.id)
+    try {
+      const startStr = format(workingMonthStart, 'yyyy-MM-dd')
+      const endStr = format(workingMonthEnd, 'yyyy-MM-dd')
+      const rows = getMonthlyRowsForEmployee(employee.id)
+      const doc = new jsPDF('portrait', 'mm', 'a4')
+      const title = `Timesheet (26–25) ${format(workingMonthStart, 'dd MMM')} – ${format(workingMonthEnd, 'dd MMM yyyy')}`
+      doc.setFontSize(16)
+      doc.text(title, 14, 20)
+      doc.setFontSize(11)
+      doc.text(`Employee ID: ${employee.employee_id || '-'}`, 14, 28)
+      doc.text(`Employee Name: ${employee.name || '-'}`, 14, 34)
+      doc.text(`From: ${format(new Date(startStr + 'T12:00:00'), 'dd MMM yyyy')}`, 14, 40)
+      doc.text(`To: ${format(new Date(endStr + 'T12:00:00'), 'dd MMM yyyy')}`, 14, 46)
+
+      const tableData = rows.map((r) => [
+        r.dateFormatted,
+        r.timeIn,
+        r.timeOut,
+        r.breakHours,
+        r.overtime,
+        r.status,
+      ])
+      autoTable(doc, {
+        startY: 52,
+        head: [['Date', 'Time In', 'Time Out', 'Break Hours', 'Overtime', 'Status']],
+        body: tableData,
+        theme: 'grid',
+        headStyles: { fillColor: [35, 136, 124] },
+      })
+      doc.save(`timesheet-${employee.employee_id || employee.id}-${format(workingMonthEnd, 'yyyy-MM')}.pdf`)
+    } catch (err) {
+      console.error('Error generating PDF:', err)
+      alert('Failed to download PDF.')
+    } finally {
+      setPdfDownloadingId(null)
+    }
+  }
+
   // ─── Loading skeleton ─────────────────────────────────────────────
 
   if (employeesLoading) {
@@ -349,12 +656,12 @@ export function TimesheetPageContent() {
   // ─── Render ───────────────────────────────────────────────────────
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-4 min-h-0">
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'daily' | 'monthly')} className="flex flex-col gap-4 min-h-0 flex-1">
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <h1 className="text-2xl font-semibold text-gray-900">Timesheet</h1>
-        <div className="flex items-center gap-3">
-          {/* Search */}
+        <div className="flex items-center gap-3 flex-wrap">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
             <Input
@@ -372,45 +679,76 @@ export function TimesheetPageContent() {
               </button>
             )}
           </div>
-          {/* Date nav */}
-          <Button variant="outline" size="icon" onClick={handlePrevDay} aria-label="Previous day">
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button
-                variant="outline"
-                className="min-w-[200px] justify-start text-left font-normal"
-              >
-                <CalendarIcon className="mr-2 h-4 w-4" />
-                {format(selectedDate, 'PPP')}
+          <TabsList className="bg-gray-100">
+            <TabsTrigger value="daily">Daily</TabsTrigger>
+            <TabsTrigger value="monthly">Monthly</TabsTrigger>
+          </TabsList>
+          {activeTab === 'daily' && (
+            <>
+              <Button variant="outline" size="icon" onClick={handlePrevDay} aria-label="Previous day">
+                <ChevronLeft className="h-4 w-4" />
               </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-auto p-0" align="end">
-              <Calendar
-                mode="single"
-                selected={selectedDate}
-                onSelect={(d) => d && setSelectedDate(d)}
-                initialFocus
-              />
-            </PopoverContent>
-          </Popover>
-          <Button variant="outline" size="icon" onClick={handleNextDay} aria-label="Next day">
-            <ChevronRight className="h-4 w-4" />
-          </Button>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className="min-w-[200px] justify-start text-left font-normal"
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {format(selectedDate, 'PPP')}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="end">
+                  <Calendar
+                    mode="single"
+                    selected={selectedDate}
+                    onSelect={(d) => d && setSelectedDate(d)}
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
+              <Button variant="outline" size="icon" onClick={handleNextDay} aria-label="Next day">
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </>
+          )}
+          {activeTab === 'monthly' && (
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" className="min-w-[200px] justify-start text-left font-normal">
+                  <CalendarIcon className="mr-2 h-4 w-4" />
+                  {format(workingMonthStart, 'd MMM')} – {format(workingMonthEnd, 'd MMM yyyy')}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="end">
+                <Calendar
+                  mode="single"
+                  selected={selectedMonth}
+                  onSelect={(d) => {
+                    if (d) {
+                      const first = new Date(d.getFullYear(), d.getMonth(), 1)
+                      setSelectedMonth(first)
+                    }
+                  }}
+                  defaultMonth={selectedMonth}
+                  initialFocus
+                />
+              </PopoverContent>
+            </Popover>
+          )}
         </div>
       </div>
 
-      {/* Table */}
-      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+      <TabsContent value="daily" className="mt-0 flex-1 flex flex-col min-h-0 data-[state=inactive]:hidden">
+      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden flex-1 min-h-0">
         <div className="overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow className="bg-[#23887C] hover:bg-[#23887C]">
                 <TableHead className="text-white font-semibold">Employee</TableHead>
-                <TableHead className="text-white font-semibold">Project</TableHead>
                 <TableHead className="text-white font-semibold">Time In</TableHead>
                 <TableHead className="text-white font-semibold">Time Out</TableHead>
+                <TableHead className="text-white font-semibold">Break hours</TableHead>
                 <TableHead className="text-white font-semibold">Overtime</TableHead>
                 <TableHead className="text-white font-semibold">Status</TableHead>
                 <TableHead className="text-white font-semibold text-right">Actions</TableHead>
@@ -450,15 +788,24 @@ export function TimesheetPageContent() {
                       const timeOut = getDefaultTimeOut(employee, record)
                       const expectedStart = getExpectedStartTime(employee, record)
                       const expectedEnd = getExpectedEndTime(employee, record)
+                      const breakHrs = getBreakHours(employee, record)
                       const overtimeMins = isPresent
-                        ? calculateOvertimeMinutes(timeIn, timeOut, expectedStart, expectedEnd)
+                        ? calculateOvertimeMinutes(
+                            timeIn,
+                            timeOut,
+                            expectedStart,
+                            expectedEnd,
+                            breakHrs,
+                            breakHrs
+                          )
                         : null
                       const overtimeStr =
                         overtimeMins != null && overtimeMins > 0
                           ? formatMinutesToTime(overtimeMins)
                           : '-'
 
-                      const projectDisplay = isPresent ? getProjectDisplay(record) : '-'
+                      const breakDisplay =
+                        isPresent && breakHrs > 0 ? (breakHrs % 1 === 0 ? String(breakHrs) : String(breakHrs)) : '-'
 
                       return (
                         <TableRow
@@ -474,8 +821,6 @@ export function TimesheetPageContent() {
                               <span>{employee.name}</span>
                             </div>
                           </TableCell>
-                          {/* Project */}
-                          <TableCell className="text-gray-700">{projectDisplay}</TableCell>
                           {/* Time In */}
                           <TableCell className="text-gray-700">
                             {isPresent && timeIn ? toHHmm(timeIn) : <span className="text-gray-400">-</span>}
@@ -484,6 +829,8 @@ export function TimesheetPageContent() {
                           <TableCell className="text-gray-700">
                             {isPresent && timeOut ? toHHmm(timeOut) : <span className="text-gray-400">-</span>}
                           </TableCell>
+                          {/* Break hours */}
+                          <TableCell className="text-gray-700">{breakDisplay}</TableCell>
                           {/* Overtime */}
                           <TableCell className="text-gray-700 font-medium">
                             {overtimeMins != null && overtimeMins > 0 ? (
@@ -601,6 +948,153 @@ export function TimesheetPageContent() {
               {editSaving ? 'Saving…' : 'Save Changes'}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      </TabsContent>
+
+      <TabsContent value="monthly" className="mt-0 flex-1 min-h-0 data-[state=inactive]:hidden">
+        <div className="space-y-4">
+          {loadingMonthly ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {Array.from({ length: 6 }, (_, i) => (
+                <Skeleton key={i} className="h-32 rounded-lg" />
+              ))}
+            </div>
+          ) : monthlyGroupedByCategory.length === 0 ? (
+            <div className="bg-white rounded-lg border border-gray-200 p-12 text-center text-gray-500">
+              No employees found
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {monthlyGroupedByCategory.map(({ category, employees: categoryEmployees }) => (
+                <div key={category}>
+                  <h3 className="text-base font-semibold text-[#23887C] mb-3">
+                    {category} ({categoryEmployees.length})
+                  </h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {categoryEmployees.map((employee) => (
+                      <Card key={employee.id} className="border-gray-200">
+                        <CardHeader className="pb-2">
+                          <CardTitle className="text-base font-medium flex flex-col gap-0.5">
+                            <span className="text-xs text-gray-500 font-normal">{employee.employee_id || '-'}</span>
+                            <span>{employee.name}</span>
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent className="flex gap-2 pt-0">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="flex-1 gap-1.5"
+                            onClick={() => openViewDialog(employee)}
+                          >
+                            <Eye className="h-3.5 w-3.5" />
+                            View
+                          </Button>
+                          <Button
+                            variant="default"
+                            size="sm"
+                            className="flex-1 gap-1.5 bg-[#23887C] hover:bg-[#1a6b62]"
+                            onClick={() => handleDownloadPdf(employee)}
+                            disabled={pdfDownloadingId === employee.id}
+                          >
+                            {pdfDownloadingId === employee.id ? (
+                              <span className="flex items-center gap-1.5">
+                                <span className="h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                Downloading…
+                              </span>
+                            ) : (
+                              <>
+                                <FileDown className="h-3.5 w-3.5" />
+                                Download PDF
+                              </>
+                            )}
+                          </Button>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </TabsContent>
+      </Tabs>
+
+      {/* View monthly timesheet dialog */}
+      <Dialog open={viewDialogOpen} onOpenChange={setViewDialogOpen}>
+        <DialogContent className="sm:max-w-[90vw] max-h-[85vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Monthly Timesheet</DialogTitle>
+            <DialogDescription asChild>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm text-gray-600">
+                {viewEmployee && (
+                  <>
+                    <span>Employee ID: <span className="font-medium text-gray-900">{viewEmployee.employee_id || '-'}</span></span>
+                    <span>Employee Name: <span className="font-medium text-gray-900">{viewEmployee.name || '-'}</span></span>
+                    <span>From: <span className="font-medium text-gray-900">{format(workingMonthStart, 'dd MMM yyyy')}</span></span>
+                    <span>To: <span className="font-medium text-gray-900">{format(workingMonthEnd, 'dd MMM yyyy')}</span></span>
+                  </>
+                )}
+              </div>
+            </DialogDescription>
+          </DialogHeader>
+          <div className="overflow-auto flex-1 min-h-0 -mx-6 px-6">
+            {viewEmployee && (
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-[#23887C] hover:bg-[#23887C]">
+                    <TableHead className="text-white font-semibold">Date</TableHead>
+                    <TableHead className="text-white font-semibold">Time In</TableHead>
+                    <TableHead className="text-white font-semibold">Time Out</TableHead>
+                    <TableHead className="text-white font-semibold">Break Hours</TableHead>
+                    <TableHead className="text-white font-semibold">Overtime</TableHead>
+                    <TableHead className="text-white font-semibold">Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {getMonthlyRowsForEmployee(viewEmployee.id).length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="py-8 text-center text-gray-500">
+                        No records for this month
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    getMonthlyRowsForEmployee(viewEmployee.id).map((row) => (
+                      <TableRow key={row.date}>
+                        <TableCell className="font-medium">{row.dateFormatted}</TableCell>
+                        <TableCell>{row.timeIn}</TableCell>
+                        <TableCell>{row.timeOut}</TableCell>
+                        <TableCell>{row.breakHours}</TableCell>
+                        <TableCell>{row.overtime}</TableCell>
+                        <TableCell>
+                          <span
+                            className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                              row.status === 'present'
+                                ? 'bg-green-100 text-green-800'
+                                : row.status === 'leave'
+                                  ? 'bg-orange-100 text-orange-800'
+                                  : row.status === 'Not Marked'
+                                    ? 'bg-gray-100 text-gray-600'
+                                    : 'bg-red-100 text-red-800'
+                            }`}
+                          >
+                            {row.status === 'present'
+                              ? 'Present'
+                              : row.status === 'leave'
+                                ? 'Leave'
+                                : row.status === 'Not Marked'
+                                  ? 'Not Marked'
+                                  : 'Absent'}
+                          </span>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            )}
+          </div>
         </DialogContent>
       </Dialog>
     </div>

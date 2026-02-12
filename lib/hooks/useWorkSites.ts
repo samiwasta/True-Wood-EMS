@@ -11,6 +11,7 @@ export interface WorkSite {
   end_date?: string
   time_in?: string
   time_out?: string
+  break_hours?: number | null
   created_at: string
 }
 
@@ -45,10 +46,11 @@ export function useWorkSites() {
     startDate?: string,
     endDate?: string,
     timeIn?: string,
-    timeOut?: string
+    timeOut?: string,
+    breakHours?: number | string | null
   ) => {
     try {
-      const data = await WorkSiteService.createWorkSite(name, location, status, shortHand, startDate, endDate, timeIn, timeOut)
+      const data = await WorkSiteService.createWorkSite(name, location, status, shortHand, startDate, endDate, timeIn, timeOut, breakHours)
       await fetchWorkSites()
       return data
     } catch (err) {
@@ -65,10 +67,11 @@ export function useWorkSites() {
     startDate?: string,
     endDate?: string,
     timeIn?: string,
-    timeOut?: string
+    timeOut?: string,
+    breakHours?: number | string | null
   ) => {
     try {
-      const data = await WorkSiteService.updateWorkSite(id, name, location, status, shortHand, startDate, endDate, timeIn, timeOut)
+      const data = await WorkSiteService.updateWorkSite(id, name, location, status, shortHand, startDate, endDate, timeIn, timeOut, breakHours)
       await fetchWorkSites()
       return data
     } catch (err) {

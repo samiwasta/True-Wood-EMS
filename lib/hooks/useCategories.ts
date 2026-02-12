@@ -25,9 +25,9 @@ export function useCategories() {
     fetchCategories()
   }, [fetchCategories])
 
-  const createCategory = useCallback(async (name: string, description?: string, timeIn?: string, timeOut?: string) => {
+  const createCategory = useCallback(async (name: string, description?: string, timeIn?: string, timeOut?: string, breakHours?: number | string | null) => {
     try {
-      const newCategory = await SettingsService.createCategory(name, description, timeIn, timeOut)
+      const newCategory = await SettingsService.createCategory(name, description, timeIn, timeOut, breakHours)
       await fetchCategories() // Refetch to get updated list
       return newCategory
     } catch (err) {
@@ -35,9 +35,9 @@ export function useCategories() {
     }
   }, [fetchCategories])
 
-  const updateCategory = useCallback(async (id: string, name: string, description?: string, timeIn?: string, timeOut?: string) => {
+  const updateCategory = useCallback(async (id: string, name: string, description?: string, timeIn?: string, timeOut?: string, breakHours?: number | string | null) => {
     try {
-      const updatedCategory = await SettingsService.updateCategory(id, name, description, timeIn, timeOut)
+      const updatedCategory = await SettingsService.updateCategory(id, name, description, timeIn, timeOut, breakHours)
       await fetchCategories() // Refetch to get updated list
       return updatedCategory
     } catch (err) {

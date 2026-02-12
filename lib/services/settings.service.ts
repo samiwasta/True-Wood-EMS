@@ -20,7 +20,7 @@ export class SettingsService {
     }
   }
 
-  static async createCategory(name: string, description?: string, timeIn?: string, timeOut?: string) {
+  static async createCategory(name: string, description?: string, timeIn?: string, timeOut?: string, breakHours?: number | string | null) {
     try {
       const trimmedName = name.trim()
       if (!trimmedName) {
@@ -42,6 +42,10 @@ export class SettingsService {
 
       if (timeOut?.trim()) {
         payload.time_out = timeOut.trim()
+      }
+      if (breakHours !== undefined && breakHours !== null && breakHours !== '') {
+        const num = typeof breakHours === 'string' ? parseFloat(breakHours) : breakHours
+        if (!Number.isNaN(num)) payload.break_hours = num
       }
 
       const { data, error } = await supabase
@@ -80,7 +84,7 @@ export class SettingsService {
     }
   }
 
-  static async updateCategory(id: string, name: string, description?: string, timeIn?: string, timeOut?: string) {
+  static async updateCategory(id: string, name: string, description?: string, timeIn?: string, timeOut?: string, breakHours?: number | string | null) {
     try {
       const trimmedName = name.trim()
       if (!trimmedName) {
@@ -109,6 +113,10 @@ export class SettingsService {
 
       if (timeOut !== undefined) {
         payload.time_out = timeOut?.trim() || null
+      }
+      if (breakHours !== undefined) {
+        const num = typeof breakHours === 'string' ? parseFloat(breakHours) : breakHours
+        payload.break_hours = num !== null && num !== undefined && !Number.isNaN(num) ? num : null
       }
 
       const { data, error } = await supabase

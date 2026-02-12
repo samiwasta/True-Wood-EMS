@@ -33,6 +33,7 @@ export function CategoriesTab() {
   const [categoryDescription, setCategoryDescription] = useState('')
   const [timeIn, setTimeIn] = useState('')
   const [timeOut, setTimeOut] = useState('')
+  const [breakHours, setBreakHours] = useState('')
   const [editingCategory, setEditingCategory] = useState<Category | null>(null)
   const [deletingCategory, setDeletingCategory] = useState<Category | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -59,13 +60,14 @@ export function CategoriesTab() {
 
     setIsSubmitting(true)
     try {
-      await createCategory(categoryName, categoryDescription, timeIn, timeOut)
+      await createCategory(categoryName, categoryDescription, timeIn, timeOut, breakHours.trim() ? parseFloat(breakHours) : undefined)
       
       // Reset form and close dialog
       setCategoryName('')
       setCategoryDescription('')
       setTimeIn('')
       setTimeOut('')
+      setBreakHours('')
       setIsAddDialogOpen(false)
     } catch (error) {
       console.error('Error adding category:', error)
@@ -89,13 +91,15 @@ export function CategoriesTab() {
       const descriptionToUpdate = categoryDescription.trim() || undefined
       const timeInToUpdate = timeIn.trim() || undefined
       const timeOutToUpdate = timeOut.trim() || undefined
-      await updateCategory(editingCategory.id, categoryName, descriptionToUpdate, timeInToUpdate, timeOutToUpdate)
+      const breakHoursToUpdate = breakHours.trim() ? parseFloat(breakHours) : undefined
+      await updateCategory(editingCategory.id, categoryName, descriptionToUpdate, timeInToUpdate, timeOutToUpdate, breakHoursToUpdate)
       
       // Reset form and close dialog
       setCategoryName('')
       setCategoryDescription('')
       setTimeIn('')
       setTimeOut('')
+      setBreakHours('')
       setEditingCategory(null)
       setIsEditDialogOpen(false)
     } catch (error) {
@@ -133,6 +137,7 @@ export function CategoriesTab() {
       setCategoryDescription('')
       setTimeIn('')
       setTimeOut('')
+      setBreakHours('')
     }
   }
 
@@ -142,6 +147,7 @@ export function CategoriesTab() {
     setCategoryDescription(category.description || '')
     setTimeIn(category.time_in || '')
     setTimeOut(category.time_out || '')
+    setBreakHours(category.break_hours != null ? String(category.break_hours) : '')
     setIsEditDialogOpen(true)
   }
 
@@ -152,6 +158,7 @@ export function CategoriesTab() {
       setCategoryDescription('')
       setTimeIn('')
       setTimeOut('')
+      setBreakHours('')
       setEditingCategory(null)
     }
   }
@@ -261,6 +268,26 @@ export function CategoriesTab() {
                       disabled={isSubmitting}
                     />
                   </div>
+                </div>
+                <div className="space-y-2">
+                  <label 
+                    htmlFor="break-hours" 
+                    className="text-sm font-medium text-gray-700 block"
+                  >
+                    Break hours <span className="text-gray-400 text-xs">(Optional)</span>
+                  </label>
+                  <Input
+                    id="break-hours"
+                    type="number"
+                    min={0}
+                    step={0.5}
+                    placeholder="e.g. 1 or 1.5"
+                    value={breakHours}
+                    onChange={(e) => setBreakHours(e.target.value)}
+                    className="h-11 border-gray-300 focus:border-[#23887C] focus:ring-[#23887C] focus:ring-1 transition-all duration-200"
+                    disabled={isSubmitting}
+                  />
+                  <p className="text-xs text-gray-400 mt-1">Duration in hours (e.g. 1 for 1 hour, 1.5 for 1h 30m)</p>
                 </div>
                 <DialogFooter className="gap-3">
                   <Button
@@ -427,6 +454,25 @@ export function CategoriesTab() {
                   disabled={isSubmitting}
                 />
               </div>
+            </div>
+            <div className="space-y-2">
+              <label 
+                htmlFor="edit-break-hours" 
+                className="text-sm font-medium text-gray-700 block"
+              >
+                Break hours <span className="text-gray-400 text-xs">(Optional)</span>
+              </label>
+              <Input
+                id="edit-break-hours"
+                type="number"
+                min={0}
+                step={0.5}
+                placeholder="e.g. 1 or 1.5"
+                value={breakHours}
+                onChange={(e) => setBreakHours(e.target.value)}
+                className="h-11 border-gray-300 focus:border-[#23887C] focus:ring-[#23887C] focus:ring-1 transition-all duration-200"
+                disabled={isSubmitting}
+              />
             </div>
             <DialogFooter className="gap-3">
               <Button

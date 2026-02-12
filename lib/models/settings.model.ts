@@ -6,6 +6,7 @@ export interface Category {
   status?: 'active' | 'inactive' | string
   time_in?: string
   time_out?: string
+  break_hours?: number | null
 }
 
 export interface Department {
