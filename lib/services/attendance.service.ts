@@ -99,6 +99,22 @@ export class AttendanceService {
     }
   }
 
+  /**
+   * Save or update attendance record for an employee.
+   * 
+   * Auto-populates time_in and time_out based on:
+   * - If status='present' and workSiteId is provided: uses work site's time_in/time_out
+   * - If status='present' and no workSiteId: uses employee's category time_in/time_out
+   * - If status='absent' or 'leave': clears time_in/time_out
+   * 
+   * @param employeeId - Employee UUID
+   * @param date - Date in YYYY-MM-DD format
+   * @param status - Attendance status: 'present', 'absent', or 'leave'
+   * @param leaveTypeId - Leave type UUID (required if status='leave')
+   * @param workSiteId - Work site UUID (optional, for work site attendance)
+   * @param timeIn - Manual override for time in (HH:mm format)
+   * @param timeOut - Manual override for time out (HH:mm format)
+   */
   static async saveAttendance(
     employeeId: string,
     date: string,
@@ -118,6 +134,51 @@ export class AttendanceService {
 
       const existing = existingRecords && existingRecords.length > 0 ? existingRecords[0] : null
 
+      // Auto-populate time_in and time_out based on status and work site
+      let finalTimeIn = timeIn
+      let finalTimeOut = timeOut
+      
+      // Only auto-populate if times are not explicitly provided and status is present
+      if (status === 'present' && timeIn === undefined && timeOut === undefined) {
+        // If work site is assigned, get times from work site
+        if (workSiteId) {
+          const { data: workSite } = await supabase
+            .from('work_sites')
+            .select('time_in, time_out')
+            .eq('id', workSiteId)
+            .single()
+          
+          if (workSite) {
+            finalTimeIn = workSite.time_in || null
+            finalTimeOut = workSite.time_out || null
+          }
+        } else {
+          // Otherwise, get times from employee's category
+          const { data: employee } = await supabase
+            .from('employees')
+            .select('category_id')
+            .eq('id', employeeId)
+            .single()
+          
+          if (employee?.category_id) {
+            const { data: category } = await supabase
+              .from('categories')
+              .select('time_in, time_out')
+              .eq('id', employee.category_id)
+              .single()
+            
+            if (category) {
+              finalTimeIn = category.time_in || null
+              finalTimeOut = category.time_out || null
+            }
+          }
+        }
+      } else if (status === 'absent' || status === 'leave') {
+        // Clear times for absent/leave if not explicitly provided
+        if (timeIn === undefined) finalTimeIn = null
+        if (timeOut === undefined) finalTimeOut = null
+      }
+
       const payload: Record<string, unknown> = {
         employee_id: employeeId,
         date: date,
@@ -125,8 +186,8 @@ export class AttendanceService {
         leave_type_id: status === 'leave' ? (leaveTypeId || null) : null,
         work_site_id: workSiteId || null,
       }
-      if (timeIn !== undefined) payload.time_in = timeIn || null
-      if (timeOut !== undefined) payload.time_out = timeOut || null
+      if (finalTimeIn !== undefined) payload.time_in = finalTimeIn || null
+      if (finalTimeOut !== undefined) payload.time_out = finalTimeOut || null
 
       if (existing && !checkError) {
         const { data, error } = await supabase
