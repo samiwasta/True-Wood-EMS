@@ -189,6 +189,7 @@ type TimesheetRecord = {
   work_site_id?: string | null
   time_in?: string | null
   time_out?: string | null
+  break_hours?: number | null
 }
 
 // ─── Component ───────────────────────────────────────────────────────
@@ -210,6 +211,7 @@ export function TimesheetPageContent() {
   const [editRecord, setEditRecord] = useState<TimesheetRecord | null>(null)
   const [editTimeIn, setEditTimeIn] = useState('')
   const [editTimeOut, setEditTimeOut] = useState('')
+  const [editBreakHours, setEditBreakHours] = useState('')
   const [editProjectId, setEditProjectId] = useState<string>('__none__')
   const [editSaving, setEditSaving] = useState(false)
   /** Project times effective on selected date (for correct overtime). */
@@ -433,8 +435,9 @@ export function TimesheetPageContent() {
     return cat?.time_out ?? null
   }
 
-  /** Break hours for display and overtime: from work site (on date) or category. */
+  /** Break hours for display and overtime: from record, work site (on date), or category. */
   const getBreakHours = (employee: Employee, record: TimesheetRecord | undefined): number => {
+    if (record?.break_hours != null) return record.break_hours
     if (record?.work_site_id) {
       const times = workSiteTimesOnDate[record.work_site_id]
       if (times?.break_hours != null) return times.break_hours
@@ -452,6 +455,7 @@ export function TimesheetPageContent() {
     record: TimesheetRecord,
     dateStr: string
   ): number => {
+    if (record.break_hours != null) return record.break_hours
     const byDate = workSiteTimesByDate[dateStr]
     if (record.work_site_id && byDate?.[record.work_site_id]?.break_hours != null)
       return byDate[record.work_site_id].break_hours!
@@ -529,6 +533,8 @@ export function TimesheetPageContent() {
     setEditRecord(record || null)
     setEditTimeIn(toHHmm(getDefaultTimeIn(employee, record)))
     setEditTimeOut(toHHmm(getDefaultTimeOut(employee, record)))
+    const breakHrs = getBreakHours(employee, record)
+    setEditBreakHours(breakHrs > 0 ? String(breakHrs) : '')
     setEditProjectId(record?.work_site_id || '__none__')
     setEditDialogOpen(true)
   }
@@ -537,9 +543,11 @@ export function TimesheetPageContent() {
     if (!editRecord || !editEmployee) return
     setEditSaving(true)
     try {
+      const breakHrsValue = editBreakHours.trim() ? parseFloat(editBreakHours) : null
       await AttendanceService.updateTimesheetRecord(editRecord.id, {
         time_in: editTimeIn.trim() || null,
         time_out: editTimeOut.trim() || null,
+        break_hours: breakHrsValue,
         work_site_id: editProjectId !== '__none__' ? editProjectId : null,
       })
       await fetchTimesheet(selectedDate)
@@ -1017,6 +1025,20 @@ export function TimesheetPageContent() {
                 type="time"
                 value={editTimeOut}
                 onChange={(e) => setEditTimeOut(e.target.value)}
+                className="h-10"
+              />
+            </div>
+
+            {/* Break Hours */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-700">Break Hours</label>
+              <Input
+                type="number"
+                step="0.5"
+                min="0"
+                placeholder="e.g., 1 or 0.5"
+                value={editBreakHours}
+                onChange={(e) => setEditBreakHours(e.target.value)}
                 className="h-10"
               />
             </div>

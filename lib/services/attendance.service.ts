@@ -275,7 +275,8 @@ export class AttendanceService {
           leave_type_id,
           work_site_id,
           time_in,
-          time_out
+          time_out,
+          break_hours
         `)
         .eq('date', date)
         .order('employee_id', { ascending: true })
@@ -304,6 +305,7 @@ export class AttendanceService {
         work_site_id?: string | null
         time_in?: string | null
         time_out?: string | null
+        break_hours?: number | null
       }> = []
       let offset = 0
       const pageSize = 1000
@@ -312,7 +314,7 @@ export class AttendanceService {
       while (hasMore) {
         const { data, error } = await supabase
           .from('attendance_records')
-          .select('id, employee_id, date, status, leave_type_id, work_site_id, time_in, time_out')
+          .select('id, employee_id, date, status, leave_type_id, work_site_id, time_in, time_out, break_hours')
           .gte('date', startDate)
           .lte('date', endDate)
           .order('date', { ascending: true })
@@ -340,12 +342,13 @@ export class AttendanceService {
     }
   }
 
-  /** Update time_in, time_out, and optionally work_site_id for an attendance record (admin timesheet edit). */
+  /** Update time_in, time_out, break_hours, and optionally work_site_id for an attendance record (admin timesheet edit). */
   static async updateTimesheetRecord(
     recordId: string,
     updates: {
       time_in?: string | null
       time_out?: string | null
+      break_hours?: number | null
       work_site_id?: string | null
     }
   ) {
@@ -353,6 +356,7 @@ export class AttendanceService {
       const payload: Record<string, unknown> = {}
       if (updates.time_in !== undefined) payload.time_in = updates.time_in
       if (updates.time_out !== undefined) payload.time_out = updates.time_out
+      if (updates.break_hours !== undefined) payload.break_hours = updates.break_hours
       if (updates.work_site_id !== undefined) payload.work_site_id = updates.work_site_id
       if (Object.keys(payload).length === 0) return null
 
