@@ -596,8 +596,9 @@ export function EmployeesTable({ searchQuery = '', onAddEmployeeTriggerRef }: Em
 
   return (
     <div className="space-y-6">
-      <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
-        <Table>
+      <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-x-auto">
+        <div className="min-w-max">
+          <Table>
           <TableHeader>
             <TableRow className="bg-[#23887C] hover:bg-[#23887C]">
               <TableHead className="font-semibold text-white h-12 px-4">Employee ID</TableHead>
@@ -813,6 +814,7 @@ export function EmployeesTable({ searchQuery = '', onAddEmployeeTriggerRef }: Em
             )}
           </TableBody>
         </Table>
+        </div>
       </div>
 
       {/* Add Employee Dialog */}
