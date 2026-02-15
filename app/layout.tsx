@@ -32,8 +32,8 @@ export default function RootLayout({
       <body className={`${poppins.variable} ${montserrat.variable} antialiased overflow-x-hidden overflow-y-auto`}>
         <SidebarProvider>
           <AppSidebar />
-          <SidebarInset>
-            <div className="flex min-h-0 flex-1 flex-col gap-4 p-4 overflow-x-hidden overflow-y-auto">
+          <SidebarInset className="min-w-0 overflow-hidden">
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 p-4 overflow-y-auto">
               {children}
             </div>
           </SidebarInset>
