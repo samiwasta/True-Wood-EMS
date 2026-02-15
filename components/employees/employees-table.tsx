@@ -606,6 +606,7 @@ export function EmployeesTable({ searchQuery = '', onAddEmployeeTriggerRef }: Em
               <TableHead className="font-semibold text-white h-12 px-4">Category</TableHead>
               <TableHead className="font-semibold text-white h-12 px-4">Department</TableHead>
               <TableHead className="font-semibold text-white h-12 px-4">Joining Date</TableHead>
+              <TableHead className="font-semibold text-white h-12 px-4">Exit Date</TableHead>
               <TableHead className="font-semibold text-white h-12 px-4">Salary</TableHead>
               <TableHead className="font-semibold text-white h-12 px-4">Status</TableHead>
               <TableHead className="font-semibold text-white h-12 px-4 text-right">Actions</TableHead>
@@ -614,7 +615,7 @@ export function EmployeesTable({ searchQuery = '', onAddEmployeeTriggerRef }: Em
           <TableBody>
             {groupedEmployees.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={9} className="text-center py-12 text-gray-500">
+                <TableCell colSpan={10} className="text-center py-12 text-gray-500">
                   No employees found
                 </TableCell>
               </TableRow>
@@ -622,7 +623,7 @@ export function EmployeesTable({ searchQuery = '', onAddEmployeeTriggerRef }: Em
               groupedEmployees.map(({ category, employees: categoryEmployees }) => (
                 <React.Fragment key={category}>
                   <TableRow className="bg-[#23887C]/10 hover:bg-[#23887C]/10 border-t-2 border-[#23887C]">
-                    <TableCell colSpan={9} className="font-semibold text-[#23887C] py-4 px-4 text-base">
+                    <TableCell colSpan={10} className="font-semibold text-[#23887C] py-4 px-4 text-base">
                       {category}
                     </TableCell>
                   </TableRow>
@@ -650,6 +651,9 @@ export function EmployeesTable({ searchQuery = '', onAddEmployeeTriggerRef }: Em
                       </TableCell>
                       <TableCell className="text-gray-600 px-4 py-3">
                         {formatDate(employee.joining_date)}
+                      </TableCell>
+                      <TableCell className="text-gray-600 px-4 py-3">
+                        {formatDate(employee.exit_date)}
                       </TableCell>
                       <TableCell className="text-gray-700 font-medium px-4 py-3">
                         {formatSalary(employee.salary)}
