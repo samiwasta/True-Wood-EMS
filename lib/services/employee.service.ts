@@ -25,7 +25,11 @@ export class EmployeeService {
     try {
       const { data, error } = await supabase
         .from('employees')
-        .select('*')
+        .select(`
+          *,
+          category:categories(id, name),
+          department:departments(id, name)
+        `)
         .order('created_at', { ascending: false })
         .limit(limit)
 
@@ -43,21 +47,39 @@ export class EmployeeService {
 
   static async getAllEmployees() {
     try {
-      const { data, error } = await supabase
-        .from('employees')
-        .select(`
-          *,
-          category:categories(id, name),
-          department:departments(id, name)
-        `)
-        .order('employee_id', { ascending: true, nullsFirst: false })
+      // Paginate to avoid Supabase's default 1000-row limit
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const allEmployees: any[] = []
+      let offset = 0
+      const pageSize = 1000
+      let hasMore = true
 
-      if (error) {
-        console.error('Error fetching employees:', error)
-        throw error
+      while (hasMore) {
+        const { data, error } = await supabase
+          .from('employees')
+          .select(`
+            *,
+            category:categories(id, name),
+            department:departments(id, name)
+          `)
+          .order('employee_id', { ascending: true, nullsFirst: false })
+          .range(offset, offset + pageSize - 1)
+
+        if (error) {
+          console.error('Error fetching employees:', error)
+          throw error
+        }
+
+        if (data && data.length > 0) {
+          allEmployees.push(...data)
+          offset += pageSize
+          hasMore = data.length === pageSize
+        } else {
+          hasMore = false
+        }
       }
 
-      return data ?? []
+      return allEmployees
     } catch (error) {
       console.error('Error fetching employees:', error)
       throw error

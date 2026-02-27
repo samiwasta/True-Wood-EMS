@@ -71,28 +71,46 @@ export class AttendanceService {
 
   static async getAttendanceByDate(date: string) {
     try {
-      const { data, error } = await supabase
-        .from('attendance_records')
-        .select(`
-          id,
-          employee_id,
-          date,
-          status,
-          leave_type_id,
-          work_site_id,
-          time_in,
-          time_out,
-          employee:employees(id, employee_id, name)
-        `)
-        .eq('date', date)
-        .order('employee_id', { ascending: true })
+      // Paginate to avoid Supabase's default 1000-row limit
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const allRecords: any[] = []
+      let offset = 0
+      const pageSize = 1000
+      let hasMore = true
 
-      if (error) {
-        console.error('Error fetching attendance by date:', error)
-        throw error
+      while (hasMore) {
+        const { data, error } = await supabase
+          .from('attendance_records')
+          .select(`
+            id,
+            employee_id,
+            date,
+            status,
+            leave_type_id,
+            work_site_id,
+            time_in,
+            time_out,
+            employee:employees(id, employee_id, name)
+          `)
+          .eq('date', date)
+          .order('employee_id', { ascending: true })
+          .range(offset, offset + pageSize - 1)
+
+        if (error) {
+          console.error('Error fetching attendance by date:', error)
+          throw error
+        }
+
+        if (data && data.length > 0) {
+          allRecords.push(...data)
+          offset += pageSize
+          hasMore = data.length === pageSize
+        } else {
+          hasMore = false
+        }
       }
 
-      return data ?? []
+      return allRecords
     } catch (error) {
       console.error('Error fetching attendance by date:', error)
       throw error
@@ -265,28 +283,45 @@ export class AttendanceService {
   /** Fetch attendance for a single date with employee info for timesheet. */
   static async getTimesheetByDate(date: string) {
     try {
-      const { data, error } = await supabase
-        .from('attendance_records')
-        .select(`
-          id,
-          employee_id,
-          date,
-          status,
-          leave_type_id,
-          work_site_id,
-          time_in,
-          time_out,
-          break_hours
-        `)
-        .eq('date', date)
-        .order('employee_id', { ascending: true })
+      // Paginate to avoid Supabase's default 1000-row limit
+      const allRecords: Array<{
+        id: string
+        employee_id: string
+        date: string
+        status: 'present' | 'absent' | 'leave'
+        leave_type_id?: string | null
+        work_site_id?: string | null
+        time_in?: string | null
+        time_out?: string | null
+        break_hours?: number | null
+      }> = []
+      let offset = 0
+      const pageSize = 1000
+      let hasMore = true
 
-      if (error) {
-        console.error('Error fetching timesheet by date:', error)
-        throw error
+      while (hasMore) {
+        const { data, error } = await supabase
+          .from('attendance_records')
+          .select('id, employee_id, date, status, leave_type_id, work_site_id, time_in, time_out, break_hours')
+          .eq('date', date)
+          .order('employee_id', { ascending: true })
+          .range(offset, offset + pageSize - 1)
+
+        if (error) {
+          console.error('Error fetching timesheet by date:', error)
+          throw error
+        }
+
+        if (data && data.length > 0) {
+          allRecords.push(...(data as typeof allRecords))
+          offset += pageSize
+          hasMore = data.length === pageSize
+        } else {
+          hasMore = false
+        }
       }
 
-      return data ?? []
+      return allRecords
     } catch (error) {
       console.error('Error fetching timesheet by date:', error)
       throw error

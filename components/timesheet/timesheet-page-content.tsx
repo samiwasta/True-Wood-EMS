@@ -23,10 +23,12 @@ import {
 import { format, eachDayOfInterval } from 'date-fns'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
+import JSZip from 'jszip'
 import {
   Table,
   TableBody,
   TableCell,
+  TableFooter,
   TableHead,
   TableHeader,
   TableRow,
@@ -234,6 +236,7 @@ export function TimesheetPageContent() {
   const [viewDialogOpen, setViewDialogOpen] = useState(false)
   const [viewEmployee, setViewEmployee] = useState<Employee | null>(null)
   const [pdfDownloadingId, setPdfDownloadingId] = useState<string | null>(null)
+  const [zipDownloading, setZipDownloading] = useState(false)
 
   // ─── Lookup maps ──────────────────────────────────────────────────
 
@@ -663,8 +666,8 @@ export function TimesheetPageContent() {
       return {
         date: dateStr,
         dateFormatted: format(new Date(dateStr + 'T12:00:00'), 'dd MMM yyyy'),
-        timeIn: timeIn ? toHHmm(timeIn) : '-',
-        timeOut: timeOut ? toHHmm(timeOut) : '-',
+        timeIn: record.status === 'absent' ? '-' : (timeIn ? toHHmm(timeIn) : '-'),
+        timeOut: record.status === 'absent' ? '-' : (timeOut ? toHHmm(timeOut) : '-'),
         breakHours: breakDisplay,
         workingHours: workingHoursStr,
         overtime: overtimeStr,
@@ -674,44 +677,96 @@ export function TimesheetPageContent() {
     })
   }
 
+  const getTimesheetPdfFileName = (employee: Employee) => {
+    const rawName = (employee.name || 'employee').trim()
+    const safeName = rawName
+      .replace(/[\\/:*?"<>|]/g, '')
+      .replace(/\s+/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '')
+      .toLowerCase()
+    return `timesheet-${safeName || 'employee'}-${format(workingMonthEnd, 'yyyy-MM')}.pdf`
+  }
+
+  const createTimesheetPdfDoc = (employee: Employee) => {
+    const startStr = format(workingMonthStart, 'yyyy-MM-dd')
+    const endStr = format(workingMonthEnd, 'yyyy-MM-dd')
+    const rows = getMonthlyRowsForEmployee(employee.id)
+    const doc = new jsPDF('portrait', 'mm', 'a4')
+    const title = `Timesheet (26–25) ${format(workingMonthStart, 'dd MMM')} – ${format(workingMonthEnd, 'dd MMM yyyy')}`
+    doc.setFontSize(16)
+    doc.text(title, 14, 20)
+    doc.setFontSize(11)
+    doc.text(`Employee ID: ${employee.employee_id || '-'}`, 14, 28)
+    doc.text(`Employee Name: ${employee.name || '-'}`, 14, 34)
+    doc.text(`From: ${format(new Date(startStr + 'T12:00:00'), 'dd MMM yyyy')}`, 14, 40)
+    doc.text(`To: ${format(new Date(endStr + 'T12:00:00'), 'dd MMM yyyy')}`, 14, 46)
+
+    const tableData = rows.map((r) => [
+      r.dateFormatted,
+      r.timeIn,
+      r.timeOut,
+      r.breakHours,
+      r.workingHours,
+      r.overtime,
+      r.status,
+    ])
+
+    autoTable(doc, {
+      startY: 52,
+      head: [['Date', 'Time In', 'Time Out', 'Break Hours', 'Working Hours', 'Overtime', 'Status']],
+      body: tableData,
+      theme: 'grid',
+      headStyles: { fillColor: [35, 136, 124] },
+    })
+
+    return doc
+  }
+
   const handleDownloadPdf = async (employee: Employee) => {
     setPdfDownloadingId(employee.id)
     try {
-      const startStr = format(workingMonthStart, 'yyyy-MM-dd')
-      const endStr = format(workingMonthEnd, 'yyyy-MM-dd')
-      const rows = getMonthlyRowsForEmployee(employee.id)
-      const doc = new jsPDF('portrait', 'mm', 'a4')
-      const title = `Timesheet (26–25) ${format(workingMonthStart, 'dd MMM')} – ${format(workingMonthEnd, 'dd MMM yyyy')}`
-      doc.setFontSize(16)
-      doc.text(title, 14, 20)
-      doc.setFontSize(11)
-      doc.text(`Employee ID: ${employee.employee_id || '-'}`, 14, 28)
-      doc.text(`Employee Name: ${employee.name || '-'}`, 14, 34)
-      doc.text(`From: ${format(new Date(startStr + 'T12:00:00'), 'dd MMM yyyy')}`, 14, 40)
-      doc.text(`To: ${format(new Date(endStr + 'T12:00:00'), 'dd MMM yyyy')}`, 14, 46)
-
-      const tableData = rows.map((r) => [
-        r.dateFormatted,
-        r.timeIn,
-        r.timeOut,
-        r.breakHours,
-        r.workingHours,
-        r.overtime,
-        r.status,
-      ])
-      autoTable(doc, {
-        startY: 52,
-        head: [['Date', 'Time In', 'Time Out', 'Break Hours', 'Working Hours', 'Overtime', 'Status']],
-        body: tableData,
-        theme: 'grid',
-        headStyles: { fillColor: [35, 136, 124] },
-      })
-      doc.save(`timesheet-${employee.employee_id || employee.id}-${format(workingMonthEnd, 'yyyy-MM')}.pdf`)
+      const doc = createTimesheetPdfDoc(employee)
+      doc.save(getTimesheetPdfFileName(employee))
     } catch (err) {
       console.error('Error generating PDF:', err)
       alert('Failed to download PDF.')
     } finally {
       setPdfDownloadingId(null)
+    }
+  }
+
+  const handleDownloadAllMonthlyZip = async () => {
+    const allEmployees = monthlyGroupedByCategory.flatMap((group) => group.employees)
+    if (allEmployees.length === 0) {
+      alert('No employees found to download.')
+      return
+    }
+
+    setZipDownloading(true)
+    try {
+      const zip = new JSZip()
+      allEmployees.forEach((employee) => {
+        const doc = createTimesheetPdfDoc(employee)
+        const blob = doc.output('blob')
+        zip.file(getTimesheetPdfFileName(employee), blob)
+      })
+
+      const zipBlob = await zip.generateAsync({ type: 'blob' })
+      const zipName = `monthly-timesheets-${format(workingMonthEnd, 'yyyy-MM')}.zip`
+      const url = URL.createObjectURL(zipBlob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = zipName
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      console.error('Error generating zip:', err)
+      alert('Failed to download ZIP.')
+    } finally {
+      setZipDownloading(false)
     }
   }
 
@@ -802,28 +857,48 @@ export function TimesheetPageContent() {
             </>
           )}
           {activeTab === 'monthly' && (
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button variant="outline" className="min-w-[200px] justify-start text-left font-normal">
-                  <CalendarIcon className="mr-2 h-4 w-4" />
-                  {format(workingMonthStart, 'd MMM')} – {format(workingMonthEnd, 'd MMM yyyy')}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="end">
-                <Calendar
-                  mode="single"
-                  selected={selectedMonth}
-                  onSelect={(d) => {
-                    if (d) {
-                      const first = new Date(d.getFullYear(), d.getMonth(), 1)
-                      setSelectedMonth(first)
-                    }
-                  }}
-                  defaultMonth={selectedMonth}
-                  initialFocus
-                />
-              </PopoverContent>
-            </Popover>
+            <>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" className="min-w-[200px] justify-start text-left font-normal">
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {format(workingMonthStart, 'd MMM')} – {format(workingMonthEnd, 'd MMM yyyy')}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="end">
+                  <Calendar
+                    mode="single"
+                    selected={selectedMonth}
+                    onSelect={(d) => {
+                      if (d) {
+                        const first = new Date(d.getFullYear(), d.getMonth(), 1)
+                        setSelectedMonth(first)
+                      }
+                    }}
+                    defaultMonth={selectedMonth}
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
+              <Button
+                variant="default"
+                className="bg-[#23887C] hover:bg-[#1a6b62]"
+                onClick={handleDownloadAllMonthlyZip}
+                disabled={zipDownloading || loadingMonthly}
+              >
+                {zipDownloading ? (
+                  <span className="flex items-center gap-2">
+                    <span className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    Preparing ZIP…
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-2">
+                    <FileDown className="h-4 w-4" />
+                    Download All ZIP
+                  </span>
+                )}
+              </Button>
+            </>
           )}
         </div>
       </div>
@@ -1148,72 +1223,98 @@ export function TimesheetPageContent() {
             </DialogDescription>
           </DialogHeader>
           <div className="overflow-auto flex-1 min-h-0 -mx-6 px-6">
-            {viewEmployee && (
-              <Table>
-                <TableHeader>
-                  <TableRow className="bg-[#23887C] hover:bg-[#23887C]">
-                    <TableHead className="text-white font-semibold">Date</TableHead>
-                    <TableHead className="text-white font-semibold">Time In</TableHead>
-                    <TableHead className="text-white font-semibold">Time Out</TableHead>
-                    <TableHead className="text-white font-semibold">Break Hours</TableHead>
-                    <TableHead className="text-white font-semibold">Working Hours</TableHead>
-                    <TableHead className="text-white font-semibold">Overtime</TableHead>
-                    <TableHead className="text-white font-semibold">Status</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {getMonthlyRowsForEmployee(viewEmployee.id).length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={7} className="py-8 text-center text-gray-500">
-                        No records for this month
-                      </TableCell>
+            {viewEmployee && (() => {
+              const viewRows = getMonthlyRowsForEmployee(viewEmployee.id)
+              const totalOvertimeMins = viewRows.reduce((acc, row) => {
+                if (!row.overtime || row.overtime === '0') return acc
+                const parts = row.overtime.split(':')
+                if (parts.length < 2) return acc
+                const h = parseInt(parts[0], 10)
+                const m = parseInt(parts[1], 10)
+                if (Number.isNaN(h) || Number.isNaN(m)) return acc
+                return acc + h * 60 + m
+              }, 0)
+              const totalOvertimeStr = formatMinutesToTime(totalOvertimeMins)
+              return (
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-[#23887C] hover:bg-[#23887C]">
+                      <TableHead className="text-white font-semibold">Date</TableHead>
+                      <TableHead className="text-white font-semibold">Time In</TableHead>
+                      <TableHead className="text-white font-semibold">Time Out</TableHead>
+                      <TableHead className="text-white font-semibold">Break Hours</TableHead>
+                      <TableHead className="text-white font-semibold">Working Hours</TableHead>
+                      <TableHead className="text-white font-semibold">Overtime</TableHead>
+                      <TableHead className="text-white font-semibold">Status</TableHead>
                     </TableRow>
-                  ) : (
-                    getMonthlyRowsForEmployee(viewEmployee.id).map((row) => (
-                      <TableRow 
-                        key={row.date}
-                        className={row.isSunday ? 'bg-red-50 hover:bg-red-100' : ''}
-                      >
-                        <TableCell className="font-medium">
-                          {row.dateFormatted}
-                          {row.isSunday && (
-                            <span className="ml-2 inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-800">
-                              WEEKOFF
-                            </span>
-                          )}
-                        </TableCell>
-                        <TableCell>{row.timeIn}</TableCell>
-                        <TableCell>{row.timeOut}</TableCell>
-                        <TableCell>{row.breakHours}</TableCell>
-                        <TableCell>{row.workingHours}</TableCell>
-                        <TableCell>{row.overtime}</TableCell>
-                        <TableCell>
-                          <span
-                            className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                              row.status === 'present'
-                                ? 'bg-green-100 text-green-800'
-                                : row.status === 'leave'
-                                  ? 'bg-orange-100 text-orange-800'
-                                  : row.status === 'Not Marked'
-                                    ? 'bg-gray-100 text-gray-600'
-                                    : 'bg-red-100 text-red-800'
-                            }`}
-                          >
-                            {row.status === 'present'
-                              ? 'Present'
-                              : row.status === 'leave'
-                                ? 'Leave'
-                                : row.status === 'Not Marked'
-                                  ? 'Not Marked'
-                                  : 'Absent'}
-                          </span>
+                  </TableHeader>
+                  <TableBody>
+                    {viewRows.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={7} className="py-8 text-center text-gray-500">
+                          No records for this month
                         </TableCell>
                       </TableRow>
-                    ))
+                    ) : (
+                      viewRows.map((row) => (
+                        <TableRow
+                          key={row.date}
+                          className={row.isSunday ? 'bg-red-50 hover:bg-red-100' : ''}
+                        >
+                          <TableCell className="font-medium">
+                            {row.dateFormatted}
+                            {row.isSunday && (
+                              <span className="ml-2 inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-800">
+                                WEEKOFF
+                              </span>
+                            )}
+                          </TableCell>
+                          <TableCell>{row.timeIn}</TableCell>
+                          <TableCell>{row.timeOut}</TableCell>
+                          <TableCell>{row.breakHours}</TableCell>
+                          <TableCell>{row.workingHours}</TableCell>
+                          <TableCell>{row.overtime}</TableCell>
+                          <TableCell>
+                            <span
+                              className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                                row.status === 'present'
+                                  ? 'bg-green-100 text-green-800'
+                                  : row.status === 'leave'
+                                    ? 'bg-orange-100 text-orange-800'
+                                    : row.status === 'Not Marked'
+                                      ? 'bg-gray-100 text-gray-600'
+                                      : 'bg-red-100 text-red-800'
+                              }`}
+                            >
+                              {row.status === 'present'
+                                ? 'Present'
+                                : row.status === 'leave'
+                                  ? 'Leave'
+                                  : row.status === 'Not Marked'
+                                    ? 'Not Marked'
+                                    : 'Absent'}
+                            </span>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                  {viewRows.length > 0 && (
+                    <TableFooter>
+                      <TableRow className="bg-[#f0faf9] hover:bg-[#e6f5f3]">
+                        <TableCell colSpan={5} className="font-semibold text-gray-800 text-right">
+                          Total Overtime
+                        </TableCell>
+                        <TableCell className="font-semibold text-[#23887C]">
+                          {totalOvertimeStr}
+                        </TableCell>
+                        <TableCell />
+                      </TableRow>
+                    </TableFooter>
                   )}
-                </TableBody>
-              </Table>
-            )}
+                </Table>
+              )
+            })()}
           </div>
         </DialogContent>
       </Dialog>
