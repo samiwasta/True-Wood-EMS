@@ -622,6 +622,13 @@ export function TimesheetPageContent() {
       .map((category) => ({ category, employees: grouped[category] }))
   }, [employees, debouncedSearch])
 
+  /** Day name helper */
+  const getDayName = (dateStr: string): string => {
+    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+    const dateObj = new Date(dateStr + 'T12:00:00')
+    return dayNames[dateObj.getDay()]
+  }
+
   /** One row per date in working month; no record = dashes / Not Marked. */
   const getMonthlyRowsForEmployee = (employeeId: string) => {
     const emp = employees.find((e) => e.id === employeeId)
@@ -634,43 +641,80 @@ export function TimesheetPageContent() {
     return workingMonthDates.map((dateStr) => {
       const dateObj = new Date(dateStr + 'T12:00:00')
       const isSunday = dateObj.getDay() === 0
+      const dayName = getDayName(dateStr)
       const record = recordsByDate.get(dateStr)
+      const workSiteName = record?.work_site_id
+        ? (workSiteMap[record.work_site_id]?.short_hand || workSiteMap[record.work_site_id]?.name || '-')
+        : '-'
+      const dayInfo = isSunday ? 'Week Off' : ''
+
       if (!record) {
         return {
           date: dateStr,
           dateFormatted: format(dateObj, 'dd MMM yyyy'),
+          dayName,
+          workSite: workSiteName,
+          dayInfo,
           timeIn: '-',
           timeOut: '-',
+          totalHours: '-',
           breakHours: '-',
-          workingHours: '-',
-          overtime: '0',
+          actualHours: '-',
+          overtime: '-',
+          holidayOvertime: '-',
           status: 'Not Marked',
           isSunday,
         }
       }
+
       const timeIn = getTimeInForRecord(emp, record, dateStr)
       const timeOut = getTimeOutForRecord(emp, record, dateStr)
       const breakHrs = getBreakHoursForDate(emp, record, dateStr)
       const expStart = getExpectedStartForDate(emp, record, dateStr)
       const expEnd = getExpectedEndForDate(emp, record, dateStr)
-      
-      const workingMins = record.status === 'present' ? calculateWorkingHours(timeIn, timeOut, breakHrs, dateStr) : null
-      const workingHoursStr = workingMins != null ? formatMinutesToTime(workingMins) : '-'
-      
+
+      // Total Hours = Time Out - Time In (no break subtracted)
+      const inMins = parseTimeToMinutes(timeIn)
+      const outMins = parseTimeToMinutes(timeOut)
+      const totalMins = (record.status === 'present' && inMins != null && outMins != null && outMins > inMins)
+        ? outMins - inMins
+        : null
+      const totalHoursStr = totalMins != null ? formatMinutesToTime(totalMins) : '-'
+
+      // Actual Hours = Total Hours - Break Hours
+      const breakMins = breakHrs * 60
+      const actualMins = totalMins != null ? Math.max(0, totalMins - breakMins) : null
+      const actualHoursStr = actualMins != null ? formatMinutesToTime(actualMins) : '-'
+
+      // Overtime (regular days only, not Sundays)
       const overtimeMins =
-        record.status === 'present'
+        record.status === 'present' && !isSunday
           ? calculateOvertimeMinutes(timeIn, timeOut, expStart, expEnd, breakHrs, breakHrs, dateStr)
           : null
-      const overtimeStr = overtimeMins != null ? formatMinutesToTime(overtimeMins) : '0'
+      const overtimeStr = (overtimeMins != null && overtimeMins > 0) ? formatMinutesToTime(overtimeMins) : '-'
+
+      // Holiday Overtime (work done on Sundays)
+      const holidayOvertimeMins =
+        record.status === 'present' && isSunday && actualMins != null
+          ? actualMins
+          : null
+      const holidayOvertimeStr = (holidayOvertimeMins != null && holidayOvertimeMins > 0) ? formatMinutesToTime(holidayOvertimeMins) : '-'
+
       const breakDisplay = breakHrs > 0 ? (breakHrs % 1 === 0 ? String(breakHrs) : String(breakHrs)) : '-'
+
       return {
         date: dateStr,
         dateFormatted: format(new Date(dateStr + 'T12:00:00'), 'dd MMM yyyy'),
+        dayName,
+        workSite: workSiteName,
+        dayInfo,
         timeIn: record.status === 'absent' ? '-' : (timeIn ? toHHmm(timeIn) : '-'),
         timeOut: record.status === 'absent' ? '-' : (timeOut ? toHHmm(timeOut) : '-'),
+        totalHours: totalHoursStr,
         breakHours: breakDisplay,
-        workingHours: workingHoursStr,
+        actualHours: actualHoursStr,
         overtime: overtimeStr,
+        holidayOvertime: holidayOvertimeStr,
         status: record.status,
         isSunday,
       }
@@ -704,20 +748,49 @@ export function TimesheetPageContent() {
 
     const tableData = rows.map((r) => [
       r.dateFormatted,
+      r.dayName,
+      r.workSite,
+      r.dayInfo,
       r.timeIn,
       r.timeOut,
+      r.totalHours,
       r.breakHours,
-      r.workingHours,
+      r.actualHours,
       r.overtime,
-      r.status,
+      r.holidayOvertime,
+    ])
+
+    // Calculate totals for the footer
+    const parseHHmm = (v: string) => {
+      if (!v || v === '-' || v === '0') return 0
+      const p = v.split(':')
+      if (p.length < 2) return 0
+      const h = parseInt(p[0], 10)
+      const m = parseInt(p[1], 10)
+      return (Number.isNaN(h) || Number.isNaN(m)) ? 0 : h * 60 + m
+    }
+    const totalOT = rows.reduce((a, r) => a + parseHHmm(r.overtime), 0)
+    const totalHOT = rows.reduce((a, r) => a + parseHHmm(r.holidayOvertime), 0)
+
+    tableData.push([
+      '', '', '', '', '', '', '', '', 'Total',
+      totalOT > 0 ? formatMinutesToTime(totalOT) : '-',
+      totalHOT > 0 ? formatMinutesToTime(totalHOT) : '-',
     ])
 
     autoTable(doc, {
       startY: 52,
-      head: [['Date', 'Time In', 'Time Out', 'Break Hours', 'Working Hours', 'Overtime', 'Status']],
+      head: [['Date', 'Day', 'Work Site', 'Day Info', 'Time In', 'Time Out', 'Total Hours', 'Break Hrs', 'Actual Hours', 'Overtime', 'Holiday OT']],
       body: tableData,
       theme: 'grid',
-      headStyles: { fillColor: [35, 136, 124] },
+      headStyles: { fillColor: [35, 136, 124], fontSize: 7 },
+      styles: { fontSize: 7, cellPadding: 2 },
+      columnStyles: {
+        0: { cellWidth: 22 },
+        1: { cellWidth: 12 },
+        2: { cellWidth: 18 },
+        3: { cellWidth: 16 },
+      },
     })
 
     return doc
@@ -1225,33 +1298,39 @@ export function TimesheetPageContent() {
           <div className="overflow-auto flex-1 min-h-0 -mx-6 px-6">
             {viewEmployee && (() => {
               const viewRows = getMonthlyRowsForEmployee(viewEmployee.id)
-              const totalOvertimeMins = viewRows.reduce((acc, row) => {
-                if (!row.overtime || row.overtime === '0') return acc
-                const parts = row.overtime.split(':')
-                if (parts.length < 2) return acc
+              const parseHHmmToMins = (v: string) => {
+                if (!v || v === '-' || v === '0') return 0
+                const parts = v.split(':')
+                if (parts.length < 2) return 0
                 const h = parseInt(parts[0], 10)
                 const m = parseInt(parts[1], 10)
-                if (Number.isNaN(h) || Number.isNaN(m)) return acc
-                return acc + h * 60 + m
-              }, 0)
-              const totalOvertimeStr = formatMinutesToTime(totalOvertimeMins)
+                return (Number.isNaN(h) || Number.isNaN(m)) ? 0 : h * 60 + m
+              }
+              const totalOvertimeMins = viewRows.reduce((acc, row) => acc + parseHHmmToMins(row.overtime), 0)
+              const totalHolidayOTMins = viewRows.reduce((acc, row) => acc + parseHHmmToMins(row.holidayOvertime), 0)
+              const totalOvertimeStr = totalOvertimeMins > 0 ? formatMinutesToTime(totalOvertimeMins) : '-'
+              const totalHolidayOTStr = totalHolidayOTMins > 0 ? formatMinutesToTime(totalHolidayOTMins) : '-'
               return (
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-[#23887C] hover:bg-[#23887C]">
                       <TableHead className="text-white font-semibold">Date</TableHead>
+                      <TableHead className="text-white font-semibold">Day</TableHead>
+                      <TableHead className="text-white font-semibold">Work Site</TableHead>
+                      <TableHead className="text-white font-semibold">Day Info</TableHead>
                       <TableHead className="text-white font-semibold">Time In</TableHead>
                       <TableHead className="text-white font-semibold">Time Out</TableHead>
-                      <TableHead className="text-white font-semibold">Break Hours</TableHead>
-                      <TableHead className="text-white font-semibold">Working Hours</TableHead>
+                      <TableHead className="text-white font-semibold">Total Hours</TableHead>
+                      <TableHead className="text-white font-semibold">Break Hrs</TableHead>
+                      <TableHead className="text-white font-semibold">Actual Hours</TableHead>
                       <TableHead className="text-white font-semibold">Overtime</TableHead>
-                      <TableHead className="text-white font-semibold">Status</TableHead>
+                      <TableHead className="text-white font-semibold">Holiday OT</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {viewRows.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={7} className="py-8 text-center text-gray-500">
+                        <TableCell colSpan={11} className="py-8 text-center text-gray-500">
                           No records for this month
                         </TableCell>
                       </TableRow>
@@ -1261,39 +1340,34 @@ export function TimesheetPageContent() {
                           key={row.date}
                           className={row.isSunday ? 'bg-red-50 hover:bg-red-100' : ''}
                         >
-                          <TableCell className="font-medium">
-                            {row.dateFormatted}
-                            {row.isSunday && (
-                              <span className="ml-2 inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-800">
-                                WEEKOFF
+                          <TableCell className="font-medium whitespace-nowrap">{row.dateFormatted}</TableCell>
+                          <TableCell>{row.dayName}</TableCell>
+                          <TableCell>{row.workSite}</TableCell>
+                          <TableCell>
+                            {row.dayInfo && (
+                              <span className="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-800">
+                                {row.dayInfo}
                               </span>
                             )}
                           </TableCell>
                           <TableCell>{row.timeIn}</TableCell>
                           <TableCell>{row.timeOut}</TableCell>
+                          <TableCell>{row.totalHours}</TableCell>
                           <TableCell>{row.breakHours}</TableCell>
-                          <TableCell>{row.workingHours}</TableCell>
-                          <TableCell>{row.overtime}</TableCell>
+                          <TableCell>{row.actualHours}</TableCell>
                           <TableCell>
-                            <span
-                              className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                                row.status === 'present'
-                                  ? 'bg-green-100 text-green-800'
-                                  : row.status === 'leave'
-                                    ? 'bg-orange-100 text-orange-800'
-                                    : row.status === 'Not Marked'
-                                      ? 'bg-gray-100 text-gray-600'
-                                      : 'bg-red-100 text-red-800'
-                              }`}
-                            >
-                              {row.status === 'present'
-                                ? 'Present'
-                                : row.status === 'leave'
-                                  ? 'Leave'
-                                  : row.status === 'Not Marked'
-                                    ? 'Not Marked'
-                                    : 'Absent'}
-                            </span>
+                            {row.overtime !== '-' ? (
+                              <span className="text-orange-600 font-medium">{row.overtime}</span>
+                            ) : (
+                              <span className="text-gray-400">-</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {row.holidayOvertime !== '-' ? (
+                              <span className="text-purple-600 font-medium">{row.holidayOvertime}</span>
+                            ) : (
+                              <span className="text-gray-400">-</span>
+                            )}
                           </TableCell>
                         </TableRow>
                       ))
@@ -1302,13 +1376,15 @@ export function TimesheetPageContent() {
                   {viewRows.length > 0 && (
                     <TableFooter>
                       <TableRow className="bg-[#f0faf9] hover:bg-[#e6f5f3]">
-                        <TableCell colSpan={5} className="font-semibold text-gray-800 text-right">
-                          Total Overtime
+                        <TableCell colSpan={9} className="font-semibold text-gray-800 text-right">
+                          Total
                         </TableCell>
                         <TableCell className="font-semibold text-[#23887C]">
                           {totalOvertimeStr}
                         </TableCell>
-                        <TableCell />
+                        <TableCell className="font-semibold text-[#23887C]">
+                          {totalHolidayOTStr}
+                        </TableCell>
                       </TableRow>
                     </TableFooter>
                   )}
