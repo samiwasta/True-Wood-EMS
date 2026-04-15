@@ -1043,7 +1043,7 @@ export function EmployeesTable({ searchQuery = '', onAddEmployeeTriggerRef }: Em
                       <SelectItem value="terminated">Terminated</SelectItem>
                       <SelectItem value="released">Released</SelectItem>
                       <SelectItem value="resigned">Resigned</SelectItem>
-                      <SelectItem value="transferred">Transferred</SelectItem>
+                      <SelectItem value="transferred">Transferred to DXB</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

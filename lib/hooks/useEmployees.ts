@@ -13,7 +13,7 @@ export interface Employee {
   joining_date?: string
   exit_date?: string
   salary?: number | string
-  status: 'active' | 'terminated' | 'released' | string
+  status: 'active' | 'terminated' | 'released' | 'resigned' | 'transferred' | string
   created_at: string
   updated_at: string
   category?: {

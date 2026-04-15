@@ -137,8 +137,9 @@ export class EmployeeService {
           const newJoiningDate = updates.joining_date as string
           const newExitDate = updates.exit_date as string | null | undefined
 
-          // If status changed from active to terminated/released/transferred, update history with exit date
-          if (oldStatus === 'active' && newStatus && ['terminated', 'released', 'transferred'].includes(newStatus)) {
+          const nonActiveStatuses = ['terminated', 'released', 'transferred', 'resigned']
+          // If status changed from active to a non-active end state, update history with exit date
+          if (oldStatus === 'active' && newStatus && nonActiveStatuses.includes(newStatus)) {
             // Get the latest active history entry
             const { data: historyEntries } = await supabase
               .from('employment_history')
@@ -156,8 +157,8 @@ export class EmployeeService {
             }
           }
 
-          // If status changed from terminated/released/transferred back to active (rejoin), create new history entry
-          if (oldStatus && ['terminated', 'released', 'transferred'].includes(oldStatus) && newStatus === 'active') {
+          // If status changed from a non-active end state back to active (rejoin), create new history entry
+          if (oldStatus && nonActiveStatuses.includes(oldStatus) && newStatus === 'active') {
             const joiningDate = newJoiningDate || new Date().toISOString().split('T')[0]
             await EmploymentHistoryService.createEmploymentHistory(
               id,
