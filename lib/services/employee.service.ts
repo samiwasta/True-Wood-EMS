@@ -2,6 +2,17 @@ import { supabase } from '@/lib/supabase'
 import { normalizePhoneNumber } from '@/lib/utils'
 import { EmploymentHistoryService } from './employment-history.service'
 
+const NON_ACTIVE_EMPLOYEE_STATUSES = ['inactive', 'terminated', 'released', 'transferred', 'resigned']
+const todayDate = () => new Date().toISOString().split('T')[0]
+const toSalaryNumber = (salary: unknown): number | null => {
+  if (salary === null || salary === undefined || salary === '') {
+    return null
+  }
+
+  const value = typeof salary === 'string' ? parseFloat(salary) : Number(salary)
+  return isNaN(value) ? null : value
+}
+
 export class EmployeeService {
   static async getEmployeeCount(): Promise<number> {
     try {
@@ -92,17 +103,38 @@ export class EmployeeService {
         throw new Error('Employee ID is required')
       }
 
-      // Get current employee data to compare status changes
       const { data: currentEmployee } = await supabase
         .from('employees')
-        .select('status, joining_date, exit_date')
+        .select('status, joining_date, exit_date, salary, created_at')
         .eq('id', id)
         .single()
+
+      const normalizedUpdates = { ...updates }
+      const salaryEffectiveDate = typeof normalizedUpdates.salary_effective_date === 'string'
+        ? normalizedUpdates.salary_effective_date
+        : undefined
+      delete normalizedUpdates.salary_effective_date
+
+      const hasSalaryUpdate = Object.prototype.hasOwnProperty.call(normalizedUpdates, 'salary')
+      const nextSalary = hasSalaryUpdate ? toSalaryNumber(normalizedUpdates.salary) : null
+      const currentSalary = toSalaryNumber(currentEmployee?.salary)
+      const nextStatus = typeof normalizedUpdates.status === 'string'
+        ? normalizedUpdates.status
+        : currentEmployee?.status
+
+      if (nextStatus === 'active') {
+        normalizedUpdates.exit_date = null
+      } else if (nextStatus && NON_ACTIVE_EMPLOYEE_STATUSES.includes(nextStatus)) {
+        const nextExitDate = normalizedUpdates.exit_date || currentEmployee?.exit_date
+        if (!nextExitDate) {
+          normalizedUpdates.exit_date = todayDate()
+        }
+      }
 
       const { data, error } = await supabase
         .from('employees')
         .update({
-          ...updates,
+          ...normalizedUpdates,
           updated_at: new Date().toISOString(),
         })
         .eq('id', id)
@@ -123,85 +155,41 @@ export class EmployeeService {
         console.error('Error updating employee:', errorInfo)
         console.error('Full error object:', error)
         console.error('Employee ID:', id)
-        console.error('Updates sent:', updates)
+        console.error('Updates sent:', normalizedUpdates)
         
         const errorMessage = error.message || error.details || 'Failed to update employee'
         throw new Error(errorMessage)
       }
 
-      // Handle employment history updates
       if (data && currentEmployee) {
         try {
-          const newStatus = updates.status as string
           const oldStatus = currentEmployee.status
-          const newJoiningDate = updates.joining_date as string
-          const newExitDate = updates.exit_date as string | null | undefined
+          const currentStatus = data.status || 'active'
+          const isRejoin = oldStatus
+            && NON_ACTIVE_EMPLOYEE_STATUSES.includes(oldStatus)
+            && currentStatus === 'active'
 
-          const nonActiveStatuses = ['terminated', 'released', 'transferred', 'resigned']
-          // If status changed from active to a non-active end state, update history with exit date
-          if (oldStatus === 'active' && newStatus && nonActiveStatuses.includes(newStatus)) {
-            // Get the latest active history entry
-            const { data: historyEntries } = await supabase
-              .from('employment_history')
-              .select('*')
-              .eq('employee_id', id)
-              .eq('status', 'active')
-              .order('created_at', { ascending: false })
-              .limit(1)
+          await EmploymentHistoryService.syncCurrentEmploymentHistory(
+            {
+              id: data.id,
+              joining_date: isRejoin && !data.joining_date ? todayDate() : data.joining_date,
+              exit_date: data.exit_date,
+              status: currentStatus,
+              created_at: data.created_at,
+            },
+            { createNewPeriod: Boolean(isRejoin) }
+          )
 
-            if (historyEntries && historyEntries.length > 0) {
-              await EmploymentHistoryService.updateEmploymentHistory(historyEntries[0].id, {
-                exit_date: newExitDate || new Date().toISOString().split('T')[0],
-                status: newStatus,
-              })
-            }
-          }
-
-          // If status changed from a non-active end state back to active (rejoin), create new history entry
-          if (oldStatus && nonActiveStatuses.includes(oldStatus) && newStatus === 'active') {
-            const joiningDate = newJoiningDate || new Date().toISOString().split('T')[0]
-            await EmploymentHistoryService.createEmploymentHistory(
-              id,
-              joiningDate,
-              null,
-              'active'
+          if (hasSalaryUpdate && nextSalary !== null && nextSalary !== currentSalary) {
+            await EmploymentHistoryService.syncCurrentSalaryHistory(
+              {
+                id: data.id,
+                salary: nextSalary,
+                joining_date: data.joining_date,
+                created_at: data.created_at,
+              },
+              salaryEffectiveDate
             )
-          }
-
-          // If employee is being updated with joining date and no history exists, create one
-          if (newJoiningDate) {
-            const { data: existingHistory } = await supabase
-              .from('employment_history')
-              .select('id')
-              .eq('employee_id', id)
-              .limit(1)
-
-            if (!existingHistory || existingHistory.length === 0) {
-              await EmploymentHistoryService.createEmploymentHistory(
-                id,
-                newJoiningDate,
-                newExitDate || null,
-                newStatus || 'active'
-              )
-            }
-          }
-          
-          // Also create history if employee has joining_date but no history exists (for existing employees)
-          if (!newJoiningDate && data.joining_date) {
-            const { data: existingHistory } = await supabase
-              .from('employment_history')
-              .select('id')
-              .eq('employee_id', id)
-              .limit(1)
-
-            if (!existingHistory || existingHistory.length === 0) {
-              await EmploymentHistoryService.createEmploymentHistory(
-                id,
-                data.joining_date,
-                data.exit_date || null,
-                data.status || 'active'
-              )
-            }
           }
         } catch (historyError) {
           console.error('Error updating employment history:', historyError)
@@ -320,6 +308,7 @@ export class EmployeeService {
     joining_date?: string
     exit_date?: string
     salary?: number | string
+    salary_effective_date?: string
     status?: string
   }) {
     try {
@@ -328,9 +317,10 @@ export class EmployeeService {
         throw new Error('Employee name is required')
       }
 
+      const initialStatus = employeeData.status || 'active'
       const payload: Record<string, unknown> = {
         name: trimmedName,
-        status: employeeData.status || 'active',
+        status: initialStatus,
       }
 
       if (employeeData.employee_id?.trim()) {
@@ -352,12 +342,12 @@ export class EmployeeService {
       if (employeeData.joining_date) {
         payload.joining_date = employeeData.joining_date
       }
-      if (employeeData.exit_date) {
-        payload.exit_date = employeeData.exit_date
+      if (initialStatus !== 'active' && NON_ACTIVE_EMPLOYEE_STATUSES.includes(initialStatus)) {
+        payload.exit_date = employeeData.exit_date || todayDate()
       }
-      if (employeeData.salary) {
-        const numSalary = typeof employeeData.salary === 'string' ? parseFloat(employeeData.salary) : employeeData.salary
-        if (!isNaN(numSalary)) {
+      if (employeeData.salary !== null && employeeData.salary !== undefined && employeeData.salary !== '') {
+        const numSalary = toSalaryNumber(employeeData.salary)
+        if (numSalary !== null) {
           payload.salary = numSalary
         }
       }
@@ -387,18 +377,23 @@ export class EmployeeService {
         throw new Error(errorMessage)
       }
 
-      // Create initial employment history entry
       if (data && data.id) {
         try {
-          const joiningDate = employeeData.joining_date || new Date().toISOString().split('T')[0]
-          const exitDate = employeeData.exit_date || null
-          const status = employeeData.status || 'active'
-          
-          await EmploymentHistoryService.createEmploymentHistory(
-            data.id,
-            joiningDate,
-            exitDate,
-            status
+          await EmploymentHistoryService.syncCurrentEmploymentHistory({
+            id: data.id,
+            joining_date: data.joining_date,
+            exit_date: data.exit_date,
+            status: data.status,
+            created_at: data.created_at,
+          })
+          await EmploymentHistoryService.syncCurrentSalaryHistory(
+            {
+              id: data.id,
+              salary: data.salary,
+              joining_date: data.joining_date,
+              created_at: data.created_at,
+            },
+            employeeData.salary_effective_date
           )
         } catch (historyError) {
           console.error('Error creating employment history:', historyError)

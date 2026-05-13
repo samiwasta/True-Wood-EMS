@@ -60,6 +60,7 @@ export function useEmployees() {
     joining_date?: string
     exit_date?: string
     salary?: number | string
+    salary_effective_date?: string
     status?: string
   }) => {
     try {

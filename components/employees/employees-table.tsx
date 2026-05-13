@@ -44,8 +44,9 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { LeaveService, EmployeeLeaveBalance } from '@/lib/services/leave.service'
-import { EmploymentHistoryService, EmploymentHistory } from '@/lib/services/employment-history.service'
+import { EmploymentHistoryService, EmploymentHistory, SalaryHistory } from '@/lib/services/employment-history.service'
 import { format } from 'date-fns'
 import { 
   normalizePhoneNumber, 
@@ -91,12 +92,15 @@ export function EmployeesTable({ searchQuery = '', onAddEmployeeTriggerRef }: Em
   const [joiningDate, setJoiningDate] = useState<Date | undefined>(undefined)
   const [exitDate, setExitDate] = useState<Date | undefined>(undefined)
   const [salary, setSalary] = useState('')
+  const [salaryEffectiveDate, setSalaryEffectiveDate] = useState<Date | undefined>(undefined)
   const [status, setStatus] = useState('active')
   
   const [showJoiningCalendar, setShowJoiningCalendar] = useState(false)
   const [showExitCalendar, setShowExitCalendar] = useState(false)
+  const [showSalaryEffectiveCalendar, setShowSalaryEffectiveCalendar] = useState(false)
   const joiningCalendarRef = useRef<HTMLDivElement>(null)
   const exitCalendarRef = useRef<HTMLDivElement>(null)
+  const salaryEffectiveCalendarRef = useRef<HTMLDivElement>(null)
   const currentYear = new Date().getFullYear()
   
   const [employeeIdError, setEmployeeIdError] = useState<string>('')
@@ -106,6 +110,7 @@ export function EmployeesTable({ searchQuery = '', onAddEmployeeTriggerRef }: Em
   const [nameError, setNameError] = useState<string>('')
   const [phoneError, setPhoneError] = useState<string>('')
   const [salaryError, setSalaryError] = useState<string>('')
+  const [salaryEffectiveDateError, setSalaryEffectiveDateError] = useState<string>('')
   
   const [leaveBalanceOpen, setLeaveBalanceOpen] = useState<string | null>(null)
   const [leaveBalance, setLeaveBalance] = useState<EmployeeLeaveBalance[]>([])
@@ -115,8 +120,10 @@ export function EmployeesTable({ searchQuery = '', onAddEmployeeTriggerRef }: Em
   const [historyDialogOpen, setHistoryDialogOpen] = useState(false)
   const [historyEmployee, setHistoryEmployee] = useState<Employee | null>(null)
   const [employmentHistory, setEmploymentHistory] = useState<EmploymentHistory[]>([])
+  const [salaryHistory, setSalaryHistory] = useState<SalaryHistory[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
   const [historyError, setHistoryError] = useState<string | null>(null)
+  const [historyActiveTab, setHistoryActiveTab] = useState<'employment' | 'salary'>('employment')
   
   useEffect(() => {
     if (onAddEmployeeTriggerRef) {
@@ -135,13 +142,16 @@ export function EmployeesTable({ searchQuery = '', onAddEmployeeTriggerRef }: Em
       if (exitCalendarRef.current && !exitCalendarRef.current.contains(event.target as Node)) {
         setShowExitCalendar(false)
       }
+      if (salaryEffectiveCalendarRef.current && !salaryEffectiveCalendarRef.current.contains(event.target as Node)) {
+        setShowSalaryEffectiveCalendar(false)
+      }
     }
     
-    if (showJoiningCalendar || showExitCalendar) {
+    if (showJoiningCalendar || showExitCalendar || showSalaryEffectiveCalendar) {
       document.addEventListener('mousedown', handleClickOutside)
       return () => document.removeEventListener('mousedown', handleClickOutside)
     }
-  }, [showJoiningCalendar, showExitCalendar])
+  }, [showJoiningCalendar, showExitCalendar, showSalaryEffectiveCalendar])
 
   useEffect(() => {
     const validateEmployeeId = async () => {
@@ -211,6 +221,15 @@ export function EmployeesTable({ searchQuery = '', onAddEmployeeTriggerRef }: Em
     return !isNaN(numSalary) && numSalary >= 0
   }
 
+  const parseSalaryAmount = (salaryValue?: number | string | null): number | null => {
+    if (salaryValue === null || salaryValue === undefined || salaryValue === '') {
+      return null
+    }
+
+    const numSalary = typeof salaryValue === 'string' ? parseFloat(salaryValue) : salaryValue
+    return isNaN(numSalary) ? null : numSalary
+  }
+
   const resetForm = () => {
     setEmployeeId('')
     setName('')
@@ -220,12 +239,14 @@ export function EmployeesTable({ searchQuery = '', onAddEmployeeTriggerRef }: Em
     setJoiningDate(undefined)
     setExitDate(undefined)
     setSalary('')
+    setSalaryEffectiveDate(undefined)
     setStatus('active')
     setEmployeeIdError('')
     setIsCheckingEmployeeId(false)
     setNameError('')
     setPhoneError('')
     setSalaryError('')
+    setSalaryEffectiveDateError('')
   }
   
   const handleEditClick = (employee: Employee) => {
@@ -237,7 +258,8 @@ export function EmployeesTable({ searchQuery = '', onAddEmployeeTriggerRef }: Em
     setDepartmentId(employee.department_id || '__none__')
     setJoiningDate(employee.joining_date ? new Date(employee.joining_date) : undefined)
     setExitDate(employee.exit_date ? new Date(employee.exit_date) : undefined)
-    setSalary(employee.salary ? String(employee.salary) : '')
+    setSalary(employee.salary !== null && employee.salary !== undefined ? String(employee.salary) : '')
+    setSalaryEffectiveDate(undefined)
     setStatus(employee.status || 'active')
     setIsEditDialogOpen(true)
   }
@@ -266,6 +288,17 @@ export function EmployeesTable({ searchQuery = '', onAddEmployeeTriggerRef }: Em
       setSalaryError('')
     }
 
+    const enteredSalary = parseSalaryAmount(salary)
+    const existingSalary = editingEmployee ? parseSalaryAmount(editingEmployee.salary) : null
+    const needsSalaryEffectiveDate = enteredSalary !== null && (!editingEmployee || enteredSalary !== existingSalary)
+
+    if (needsSalaryEffectiveDate && !salaryEffectiveDate) {
+      setSalaryEffectiveDateError('Salary effective date is required')
+      isValid = false
+    } else {
+      setSalaryEffectiveDateError('')
+    }
+
     if (employeeIdError || isCheckingEmployeeId) {
       isValid = false
     }
@@ -291,6 +324,7 @@ export function EmployeesTable({ searchQuery = '', onAddEmployeeTriggerRef }: Em
         joining_date: joiningDate ? format(joiningDate, 'yyyy-MM-dd') : undefined,
         exit_date: exitDate ? format(exitDate, 'yyyy-MM-dd') : undefined,
         salary: salary ? parseFloat(salary) : undefined,
+        salary_effective_date: salary && salaryEffectiveDate ? format(salaryEffectiveDate, 'yyyy-MM-dd') : undefined,
         status: status,
       })
       resetForm()
@@ -308,8 +342,7 @@ export function EmployeesTable({ searchQuery = '', onAddEmployeeTriggerRef }: Em
     e.preventDefault()
     
     if (!editingEmployee) return
-    if (!name.trim()) {
-      alert('Employee name is required')
+    if (!validateForm()) {
       return
     }
     
@@ -361,6 +394,11 @@ export function EmployeesTable({ searchQuery = '', onAddEmployeeTriggerRef }: Em
         const numSalary = parseFloat(salary)
         if (!isNaN(numSalary)) {
           updates.salary = numSalary
+
+          const existingSalary = parseSalaryAmount(editingEmployee.salary)
+          if (numSalary !== existingSalary && salaryEffectiveDate) {
+            updates.salary_effective_date = format(salaryEffectiveDate, 'yyyy-MM-dd')
+          }
         }
       } else {
         updates.salary = null
@@ -524,15 +562,25 @@ export function EmployeesTable({ searchQuery = '', onAddEmployeeTriggerRef }: Em
     setHistoryLoading(true)
     setHistoryError(null)
     setEmploymentHistory([])
-    
+    setSalaryHistory([])
+    setHistoryActiveTab('employment')
+
     try {
-      const history = await EmploymentHistoryService.getEmploymentHistory(employee.id)
+      const [history, salaryRecords] = await Promise.all([
+        EmploymentHistoryService.getEmploymentHistory(employee.id),
+        EmploymentHistoryService.getSalaryHistory(employee.id),
+      ])
       setEmploymentHistory(history)
+      setSalaryHistory(salaryRecords)
+      if (history.length === 0 && salaryRecords.length > 0) {
+        setHistoryActiveTab('salary')
+      }
     } catch (error) {
       console.error('Error fetching employment history:', error)
       const errorMessage = error instanceof Error ? error.message : 'Failed to load employment history'
       setHistoryError(errorMessage)
       setEmploymentHistory([])
+      setSalaryHistory([])
     } finally {
       setHistoryLoading(false)
     }
@@ -678,7 +726,7 @@ export function EmployeesTable({ searchQuery = '', onAddEmployeeTriggerRef }: Em
                               </Button>
                             </TooltipTrigger>
                             <TooltipContent>
-                              <p>View Employment History</p>
+                              <p>View Employee History</p>
                             </TooltipContent>
                           </Tooltip>
                           <Popover 
@@ -1058,10 +1106,65 @@ export function EmployeesTable({ searchQuery = '', onAddEmployeeTriggerRef }: Em
                     step="0.01"
                     placeholder="0.00"
                     value={salary}
-                    onChange={(e) => setSalary(e.target.value)}
-                    className="h-11 border-gray-300 focus:border-[#23887C] focus:ring-[#23887C] focus:ring-1"
+                    onChange={(e) => {
+                      setSalary(e.target.value)
+                      if (!e.target.value || validateSalary(e.target.value)) {
+                        setSalaryError('')
+                      }
+                      if (!e.target.value) {
+                        setSalaryEffectiveDateError('')
+                      }
+                    }}
+                    className={`h-11 border-gray-300 focus:border-[#23887C] focus:ring-[#23887C] focus:ring-1 ${
+                      salaryError ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : ''
+                    }`}
                     disabled={isSubmitting}
                   />
+                  {salaryError && (
+                    <p className="text-sm text-red-600 mt-1">{salaryError}</p>
+                  )}
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label htmlFor="add-salary-effective-date" className="text-sm font-medium text-gray-700 block">
+                    Salary Effective Date
+                  </label>
+                  <div className="relative w-full" ref={salaryEffectiveCalendarRef}>
+                    <Input
+                      id="add-salary-effective-date"
+                      type="text"
+                      readOnly
+                      placeholder="Select salary date"
+                      value={salaryEffectiveDate ? format(salaryEffectiveDate, 'PPP') : ''}
+                      onClick={() => setShowSalaryEffectiveCalendar(!showSalaryEffectiveCalendar)}
+                      className={`h-11 w-full border-gray-300 focus:border-[#23887C] focus:ring-[#23887C] focus:ring-1 cursor-pointer pr-10 ${
+                        salaryEffectiveDateError ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : ''
+                      }`}
+                      disabled={isSubmitting || !salary}
+                    />
+                    <CalendarIcon className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+                    {showSalaryEffectiveCalendar && (
+                      <div className="absolute z-[100] mt-1 left-0 top-full bg-white border border-gray-300 rounded-md shadow-xl p-3">
+                        <Calendar
+                          mode="single"
+                          selected={salaryEffectiveDate}
+                          onSelect={(date) => {
+                            setSalaryEffectiveDate(date)
+                            setSalaryEffectiveDateError('')
+                            setShowSalaryEffectiveCalendar(false)
+                          }}
+                          disabled={isSubmitting}
+                          captionLayout="dropdown"
+                          fromYear={currentYear - 50}
+                          toYear={currentYear + 1}
+                        />
+                      </div>
+                    )}
+                  </div>
+                  {salaryEffectiveDateError && (
+                    <p className="text-sm text-red-600 mt-1">{salaryEffectiveDateError}</p>
+                  )}
                 </div>
               </div>
             </div>
@@ -1077,7 +1180,7 @@ export function EmployeesTable({ searchQuery = '', onAddEmployeeTriggerRef }: Em
               </Button>
               <Button
                 type="submit"
-                disabled={isSubmitting || isCheckingEmployeeId || !!employeeIdError || !!nameError || !!phoneError || !!salaryError}
+                disabled={isSubmitting || isCheckingEmployeeId || !!employeeIdError || !!nameError || !!phoneError || !!salaryError || !!salaryEffectiveDateError}
                 className="bg-[#23887C] hover:bg-[#1f7569] text-white disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isSubmitting ? (
@@ -1342,6 +1445,9 @@ export function EmployeesTable({ searchQuery = '', onAddEmployeeTriggerRef }: Em
                       } else {
                         setSalaryError('')
                       }
+                      if (!e.target.value) {
+                        setSalaryEffectiveDateError('')
+                      }
                     }}
                     onBlur={() => {
                       if (salary && !validateSalary(salary)) {
@@ -1358,6 +1464,48 @@ export function EmployeesTable({ searchQuery = '', onAddEmployeeTriggerRef }: Em
                   )}
                 </div>
               </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label htmlFor="edit-salary-effective-date" className="text-sm font-medium text-gray-700 block">
+                    Salary Effective Date
+                  </label>
+                  <div className="relative w-full" ref={salaryEffectiveCalendarRef}>
+                    <Input
+                      id="edit-salary-effective-date"
+                      type="text"
+                      readOnly
+                      placeholder="Select salary date"
+                      value={salaryEffectiveDate ? format(salaryEffectiveDate, 'PPP') : ''}
+                      onClick={() => setShowSalaryEffectiveCalendar(!showSalaryEffectiveCalendar)}
+                      className={`h-11 w-full border-gray-300 focus:border-[#23887C] focus:ring-[#23887C] focus:ring-1 cursor-pointer pr-10 ${
+                        salaryEffectiveDateError ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : ''
+                      }`}
+                      disabled={isSubmitting || parseSalaryAmount(salary) === parseSalaryAmount(editingEmployee?.salary)}
+                    />
+                    <CalendarIcon className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+                    {showSalaryEffectiveCalendar && (
+                      <div className="absolute z-[100] mt-1 left-0 top-full bg-white border border-gray-300 rounded-md shadow-xl p-3">
+                        <Calendar
+                          mode="single"
+                          selected={salaryEffectiveDate}
+                          onSelect={(date) => {
+                            setSalaryEffectiveDate(date)
+                            setSalaryEffectiveDateError('')
+                            setShowSalaryEffectiveCalendar(false)
+                          }}
+                          disabled={isSubmitting}
+                          captionLayout="dropdown"
+                          fromYear={currentYear - 50}
+                          toYear={currentYear + 1}
+                        />
+                      </div>
+                    )}
+                  </div>
+                  {salaryEffectiveDateError && (
+                    <p className="text-sm text-red-600 mt-1">{salaryEffectiveDateError}</p>
+                  )}
+                </div>
+              </div>
             </div>
             <DialogFooter className="gap-3">
               <Button
@@ -1371,7 +1519,7 @@ export function EmployeesTable({ searchQuery = '', onAddEmployeeTriggerRef }: Em
               </Button>
               <Button
                 type="submit"
-                disabled={isSubmitting || isCheckingEmployeeId || !!employeeIdError || !!nameError || !!phoneError || !!salaryError}
+                disabled={isSubmitting || isCheckingEmployeeId || !!employeeIdError || !!nameError || !!phoneError || !!salaryError || !!salaryEffectiveDateError}
                 className="bg-[#23887C] hover:bg-[#1f7569] text-white disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isSubmitting ? (
@@ -1457,7 +1605,9 @@ export function EmployeesTable({ searchQuery = '', onAddEmployeeTriggerRef }: Em
           if (!open) {
             setHistoryEmployee(null)
             setEmploymentHistory([])
+            setSalaryHistory([])
             setHistoryError(null)
+            setHistoryActiveTab('employment')
           }
         }}
       >
@@ -1465,12 +1615,12 @@ export function EmployeesTable({ searchQuery = '', onAddEmployeeTriggerRef }: Em
           <DialogHeader>
             <DialogTitle className="text-xl font-semibold text-gray-900 flex items-center gap-2">
               <History className="h-5 w-5 text-[#23887C]" />
-              Employment History
+              Employee History
             </DialogTitle>
             <DialogDescription className="text-gray-500">
               {historyEmployee && (
                 <>
-                  View employment history for <span className="font-semibold text-gray-900">{historyEmployee.name}</span>
+                  View history for <span className="font-semibold text-gray-900">{historyEmployee.name}</span>
                   {historyEmployee.employee_id && (
                     <> (ID: {historyEmployee.employee_id})</>
                   )}
@@ -1489,62 +1639,115 @@ export function EmployeesTable({ searchQuery = '', onAddEmployeeTriggerRef }: Em
                 <AlertTriangle className="h-8 w-8 text-red-500 mx-auto mb-3" />
                 <p className="text-sm text-red-600">{historyError}</p>
               </div>
-            ) : employmentHistory.length === 0 ? (
+            ) : employmentHistory.length === 0 && salaryHistory.length === 0 ? (
               <div className="py-8 text-center">
                 <History className="h-12 w-12 text-gray-400 mx-auto mb-3" />
-                <p className="text-sm text-gray-500">No employment history found</p>
+                <p className="text-sm text-gray-500">No employee history found</p>
               </div>
             ) : (
-              <div className="space-y-3">
-                {employmentHistory.map((record, index) => (
-                  <div
-                    key={record.id}
-                    className="p-4 bg-gray-50 rounded-lg border border-gray-200 hover:border-[#23887C]/30 transition-colors"
-                  >
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="flex items-center gap-2">
-                        <div className="p-2 bg-[#23887C]/10 rounded-lg">
-                          <History className="h-4 w-4 text-[#23887C]" />
+              <Tabs
+                value={historyActiveTab}
+                onValueChange={(v) => setHistoryActiveTab(v as 'employment' | 'salary')}
+                className="w-full gap-3"
+              >
+                <TabsList className="grid w-full grid-cols-2 h-auto p-1">
+                  <TabsTrigger value="employment" className="flex-1">
+                    Employment Periods
+                  </TabsTrigger>
+                  <TabsTrigger value="salary" className="flex-1">
+                    Salary History
+                  </TabsTrigger>
+                </TabsList>
+                <TabsContent value="employment" className="mt-0">
+                  <div className="max-h-[min(55vh,420px)] overflow-y-auto pr-1 space-y-3">
+                    {employmentHistory.length === 0 ? (
+                      <div className="py-10 text-center text-sm text-gray-500">
+                        No employment periods recorded
+                      </div>
+                    ) : (
+                      employmentHistory.map((record, index) => (
+                        <div
+                          key={record.id}
+                          className="p-4 bg-gray-50 rounded-lg border border-gray-200 hover:border-[#23887C]/30 transition-colors"
+                        >
+                          <div className="flex items-start justify-between mb-3">
+                            <div className="flex items-center gap-2">
+                              <div className="p-2 bg-[#23887C]/10 rounded-lg">
+                                <History className="h-4 w-4 text-[#23887C]" />
+                              </div>
+                              <div>
+                                <p className="font-semibold text-gray-900">Period {employmentHistory.length - index}</p>
+                                <p className="text-xs text-gray-500 mt-0.5">
+                                  {record.status === 'active' ? 'Current' : 'Previous'} Employment
+                                </p>
+                              </div>
+                            </div>
+                            <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${
+                              record.status === 'active'
+                                ? 'bg-green-100 text-green-700 border border-green-200'
+                                : 'bg-gray-100 text-gray-700 border border-gray-200'
+                            }`}>
+                              {record.status}
+                            </span>
+                          </div>
+                          <div className="grid grid-cols-2 gap-4 mt-3">
+                            <div>
+                              <p className="text-xs text-gray-500 mb-1">Joining Date</p>
+                              <p className="text-sm font-medium text-gray-900">
+                                {format(new Date(record.joining_date), 'PPP')}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-500 mb-1">Exit Date</p>
+                              <p className="text-sm font-medium text-gray-900">
+                                {record.exit_date ? format(new Date(record.exit_date), 'PPP') : '-'}
+                              </p>
+                            </div>
+                          </div>
+                          {record.exit_date && (
+                            <div className="mt-3 pt-3 border-t border-gray-200">
+                              <p className="text-xs text-gray-500">
+                                Duration: {Math.ceil((new Date(record.exit_date).getTime() - new Date(record.joining_date).getTime()) / (1000 * 60 * 60 * 24))} days
+                              </p>
+                            </div>
+                          )}
                         </div>
-                        <div>
-                          <p className="font-semibold text-gray-900">Period {employmentHistory.length - index}</p>
-                          <p className="text-xs text-gray-500 mt-0.5">
-                            {record.status === 'active' ? 'Current' : 'Previous'} Employment
-                          </p>
-                        </div>
-                      </div>
-                      <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${
-                        record.status === 'active'
-                          ? 'bg-green-100 text-green-700 border border-green-200'
-                          : 'bg-gray-100 text-gray-700 border border-gray-200'
-                      }`}>
-                        {record.status}
-                      </span>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4 mt-3">
-                      <div>
-                        <p className="text-xs text-gray-500 mb-1">Joining Date</p>
-                        <p className="text-sm font-medium text-gray-900">
-                          {format(new Date(record.joining_date), 'PPP')}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-gray-500 mb-1">Exit Date</p>
-                        <p className="text-sm font-medium text-gray-900">
-                          {record.exit_date ? format(new Date(record.exit_date), 'PPP') : '-'}
-                        </p>
-                      </div>
-                    </div>
-                    {record.exit_date && (
-                      <div className="mt-3 pt-3 border-t border-gray-200">
-                        <p className="text-xs text-gray-500">
-                          Duration: {Math.ceil((new Date(record.exit_date).getTime() - new Date(record.joining_date).getTime()) / (1000 * 60 * 60 * 24))} days
-                        </p>
-                      </div>
+                      ))
                     )}
                   </div>
-                ))}
-              </div>
+                </TabsContent>
+                <TabsContent value="salary" className="mt-0">
+                  <div className="max-h-[min(55vh,420px)] overflow-y-auto pr-1 space-y-3">
+                    {salaryHistory.length === 0 ? (
+                      <div className="py-10 text-center text-sm text-gray-500">
+                        No salary history recorded
+                      </div>
+                    ) : (
+                      salaryHistory.map((record) => (
+                        <div
+                          key={record.id}
+                          className="p-4 bg-gray-50 rounded-lg border border-gray-200 hover:border-[#23887C]/30 transition-colors"
+                        >
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <p className="text-xs text-gray-500 mb-1">Effective Date</p>
+                              <p className="text-sm font-medium text-gray-900">
+                                {format(new Date(record.effective_date), 'PPP')}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-500 mb-1">Salary</p>
+                              <p className="text-sm font-semibold text-gray-900">
+                                {formatSalary(record.salary)}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </TabsContent>
+              </Tabs>
             )}
           </div>
           <DialogFooter>
@@ -1555,7 +1758,9 @@ export function EmployeesTable({ searchQuery = '', onAddEmployeeTriggerRef }: Em
                 setHistoryDialogOpen(false)
                 setHistoryEmployee(null)
                 setEmploymentHistory([])
+                setSalaryHistory([])
                 setHistoryError(null)
+                setHistoryActiveTab('employment')
               }}
               className="border-gray-300 text-gray-700 hover:bg-gray-50"
             >
