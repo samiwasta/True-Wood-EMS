@@ -46,7 +46,7 @@ import {
 } from '@/components/ui/tooltip'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { LeaveService, EmployeeLeaveBalance } from '@/lib/services/leave.service'
-import { EmploymentHistoryService, EmploymentHistory, SalaryHistory } from '@/lib/services/employment-history.service'
+import { EmploymentHistoryService, EmploymentHistory, SalaryHistory, FoodAllowanceHistory } from '@/lib/services/employment-history.service'
 import { format } from 'date-fns'
 import { 
   normalizePhoneNumber, 
@@ -93,14 +93,18 @@ export function EmployeesTable({ searchQuery = '', onAddEmployeeTriggerRef }: Em
   const [exitDate, setExitDate] = useState<Date | undefined>(undefined)
   const [salary, setSalary] = useState('')
   const [salaryEffectiveDate, setSalaryEffectiveDate] = useState<Date | undefined>(undefined)
+  const [foodAllowance, setFoodAllowance] = useState('')
+  const [foodAllowanceEffectiveDate, setFoodAllowanceEffectiveDate] = useState<Date | undefined>(undefined)
   const [status, setStatus] = useState('active')
   
   const [showJoiningCalendar, setShowJoiningCalendar] = useState(false)
   const [showExitCalendar, setShowExitCalendar] = useState(false)
   const [showSalaryEffectiveCalendar, setShowSalaryEffectiveCalendar] = useState(false)
+  const [showFoodAllowanceEffectiveCalendar, setShowFoodAllowanceEffectiveCalendar] = useState(false)
   const joiningCalendarRef = useRef<HTMLDivElement>(null)
   const exitCalendarRef = useRef<HTMLDivElement>(null)
   const salaryEffectiveCalendarRef = useRef<HTMLDivElement>(null)
+  const foodAllowanceEffectiveCalendarRef = useRef<HTMLDivElement>(null)
   const currentYear = new Date().getFullYear()
   
   const [employeeIdError, setEmployeeIdError] = useState<string>('')
@@ -111,6 +115,8 @@ export function EmployeesTable({ searchQuery = '', onAddEmployeeTriggerRef }: Em
   const [phoneError, setPhoneError] = useState<string>('')
   const [salaryError, setSalaryError] = useState<string>('')
   const [salaryEffectiveDateError, setSalaryEffectiveDateError] = useState<string>('')
+  const [foodAllowanceError, setFoodAllowanceError] = useState<string>('')
+  const [foodAllowanceEffectiveDateError, setFoodAllowanceEffectiveDateError] = useState<string>('')
   
   const [leaveBalanceOpen, setLeaveBalanceOpen] = useState<string | null>(null)
   const [leaveBalance, setLeaveBalance] = useState<EmployeeLeaveBalance[]>([])
@@ -121,9 +127,10 @@ export function EmployeesTable({ searchQuery = '', onAddEmployeeTriggerRef }: Em
   const [historyEmployee, setHistoryEmployee] = useState<Employee | null>(null)
   const [employmentHistory, setEmploymentHistory] = useState<EmploymentHistory[]>([])
   const [salaryHistory, setSalaryHistory] = useState<SalaryHistory[]>([])
+  const [foodAllowanceHistory, setFoodAllowanceHistory] = useState<FoodAllowanceHistory[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
   const [historyError, setHistoryError] = useState<string | null>(null)
-  const [historyActiveTab, setHistoryActiveTab] = useState<'employment' | 'salary'>('employment')
+  const [historyActiveTab, setHistoryActiveTab] = useState<'employment' | 'salary' | 'food_allowance'>('employment')
   
   useEffect(() => {
     if (onAddEmployeeTriggerRef) {
@@ -145,13 +152,16 @@ export function EmployeesTable({ searchQuery = '', onAddEmployeeTriggerRef }: Em
       if (salaryEffectiveCalendarRef.current && !salaryEffectiveCalendarRef.current.contains(event.target as Node)) {
         setShowSalaryEffectiveCalendar(false)
       }
+      if (foodAllowanceEffectiveCalendarRef.current && !foodAllowanceEffectiveCalendarRef.current.contains(event.target as Node)) {
+        setShowFoodAllowanceEffectiveCalendar(false)
+      }
     }
     
-    if (showJoiningCalendar || showExitCalendar || showSalaryEffectiveCalendar) {
+    if (showJoiningCalendar || showExitCalendar || showSalaryEffectiveCalendar || showFoodAllowanceEffectiveCalendar) {
       document.addEventListener('mousedown', handleClickOutside)
       return () => document.removeEventListener('mousedown', handleClickOutside)
     }
-  }, [showJoiningCalendar, showExitCalendar, showSalaryEffectiveCalendar])
+  }, [showJoiningCalendar, showExitCalendar, showSalaryEffectiveCalendar, showFoodAllowanceEffectiveCalendar])
 
   useEffect(() => {
     const validateEmployeeId = async () => {
@@ -213,21 +223,21 @@ export function EmployeesTable({ searchQuery = '', onAddEmployeeTriggerRef }: Em
     }
   }
 
-  const validateSalary = (salaryValue: string): boolean => {
-    if (!salaryValue || !salaryValue.trim()) {
+  const validateAmount = (amountValue: string): boolean => {
+    if (!amountValue || !amountValue.trim()) {
       return true
     }
-    const numSalary = parseFloat(salaryValue)
-    return !isNaN(numSalary) && numSalary >= 0
+    const numAmount = parseFloat(amountValue)
+    return !isNaN(numAmount) && numAmount >= 0
   }
 
-  const parseSalaryAmount = (salaryValue?: number | string | null): number | null => {
-    if (salaryValue === null || salaryValue === undefined || salaryValue === '') {
+  const parseAmount = (amountValue?: number | string | null): number | null => {
+    if (amountValue === null || amountValue === undefined || amountValue === '') {
       return null
     }
 
-    const numSalary = typeof salaryValue === 'string' ? parseFloat(salaryValue) : salaryValue
-    return isNaN(numSalary) ? null : numSalary
+    const numAmount = typeof amountValue === 'string' ? parseFloat(amountValue) : amountValue
+    return isNaN(numAmount) ? null : numAmount
   }
 
   const resetForm = () => {
@@ -240,6 +250,8 @@ export function EmployeesTable({ searchQuery = '', onAddEmployeeTriggerRef }: Em
     setExitDate(undefined)
     setSalary('')
     setSalaryEffectiveDate(undefined)
+    setFoodAllowance('')
+    setFoodAllowanceEffectiveDate(undefined)
     setStatus('active')
     setEmployeeIdError('')
     setIsCheckingEmployeeId(false)
@@ -247,6 +259,8 @@ export function EmployeesTable({ searchQuery = '', onAddEmployeeTriggerRef }: Em
     setPhoneError('')
     setSalaryError('')
     setSalaryEffectiveDateError('')
+    setFoodAllowanceError('')
+    setFoodAllowanceEffectiveDateError('')
   }
   
   const handleEditClick = (employee: Employee) => {
@@ -260,6 +274,8 @@ export function EmployeesTable({ searchQuery = '', onAddEmployeeTriggerRef }: Em
     setExitDate(employee.exit_date ? new Date(employee.exit_date) : undefined)
     setSalary(employee.salary !== null && employee.salary !== undefined ? String(employee.salary) : '')
     setSalaryEffectiveDate(undefined)
+    setFoodAllowance(employee.food_allowance !== null && employee.food_allowance !== undefined ? String(employee.food_allowance) : '')
+    setFoodAllowanceEffectiveDate(undefined)
     setStatus(employee.status || 'active')
     setIsEditDialogOpen(true)
   }
@@ -281,15 +297,15 @@ export function EmployeesTable({ searchQuery = '', onAddEmployeeTriggerRef }: Em
       setPhoneError('')
     }
 
-    if (salary && !validateSalary(salary)) {
+    if (salary && !validateAmount(salary)) {
       setSalaryError('Please enter a valid salary amount')
       isValid = false
     } else {
       setSalaryError('')
     }
 
-    const enteredSalary = parseSalaryAmount(salary)
-    const existingSalary = editingEmployee ? parseSalaryAmount(editingEmployee.salary) : null
+    const enteredSalary = parseAmount(salary)
+    const existingSalary = editingEmployee ? parseAmount(editingEmployee.salary) : null
     const needsSalaryEffectiveDate = enteredSalary !== null && (!editingEmployee || enteredSalary !== existingSalary)
 
     if (needsSalaryEffectiveDate && !salaryEffectiveDate) {
@@ -297,6 +313,24 @@ export function EmployeesTable({ searchQuery = '', onAddEmployeeTriggerRef }: Em
       isValid = false
     } else {
       setSalaryEffectiveDateError('')
+    }
+
+    if (foodAllowance && !validateAmount(foodAllowance)) {
+      setFoodAllowanceError('Please enter a valid food allowance amount')
+      isValid = false
+    } else {
+      setFoodAllowanceError('')
+    }
+
+    const enteredFoodAllowance = parseAmount(foodAllowance)
+    const existingFoodAllowance = editingEmployee ? parseAmount(editingEmployee.food_allowance) : null
+    const needsFoodAllowanceEffectiveDate = enteredFoodAllowance !== null && (!editingEmployee || enteredFoodAllowance !== existingFoodAllowance)
+
+    if (needsFoodAllowanceEffectiveDate && !foodAllowanceEffectiveDate) {
+      setFoodAllowanceEffectiveDateError('Food allowance effective date is required')
+      isValid = false
+    } else {
+      setFoodAllowanceEffectiveDateError('')
     }
 
     if (employeeIdError || isCheckingEmployeeId) {
@@ -325,6 +359,8 @@ export function EmployeesTable({ searchQuery = '', onAddEmployeeTriggerRef }: Em
         exit_date: exitDate ? format(exitDate, 'yyyy-MM-dd') : undefined,
         salary: salary ? parseFloat(salary) : undefined,
         salary_effective_date: salary && salaryEffectiveDate ? format(salaryEffectiveDate, 'yyyy-MM-dd') : undefined,
+        food_allowance: foodAllowance ? parseFloat(foodAllowance) : undefined,
+        food_allowance_effective_date: foodAllowance && foodAllowanceEffectiveDate ? format(foodAllowanceEffectiveDate, 'yyyy-MM-dd') : undefined,
         status: status,
       })
       resetForm()
@@ -395,13 +431,27 @@ export function EmployeesTable({ searchQuery = '', onAddEmployeeTriggerRef }: Em
         if (!isNaN(numSalary)) {
           updates.salary = numSalary
 
-          const existingSalary = parseSalaryAmount(editingEmployee.salary)
+          const existingSalary = parseAmount(editingEmployee.salary)
           if (numSalary !== existingSalary && salaryEffectiveDate) {
             updates.salary_effective_date = format(salaryEffectiveDate, 'yyyy-MM-dd')
           }
         }
       } else {
         updates.salary = null
+      }
+
+      if (foodAllowance) {
+        const numFoodAllowance = parseFloat(foodAllowance)
+        if (!isNaN(numFoodAllowance)) {
+          updates.food_allowance = numFoodAllowance
+
+          const existingFoodAllowance = parseAmount(editingEmployee.food_allowance)
+          if (numFoodAllowance !== existingFoodAllowance && foodAllowanceEffectiveDate) {
+            updates.food_allowance_effective_date = format(foodAllowanceEffectiveDate, 'yyyy-MM-dd')
+          }
+        }
+      } else {
+        updates.food_allowance = null
       }
       
       await updateEmployee(editingEmployee.id, updates)
@@ -563,17 +613,22 @@ export function EmployeesTable({ searchQuery = '', onAddEmployeeTriggerRef }: Em
     setHistoryError(null)
     setEmploymentHistory([])
     setSalaryHistory([])
+    setFoodAllowanceHistory([])
     setHistoryActiveTab('employment')
 
     try {
-      const [history, salaryRecords] = await Promise.all([
+      const [history, salaryRecords, foodAllowanceRecords] = await Promise.all([
         EmploymentHistoryService.getEmploymentHistory(employee.id),
         EmploymentHistoryService.getSalaryHistory(employee.id),
+        EmploymentHistoryService.getFoodAllowanceHistory(employee.id),
       ])
       setEmploymentHistory(history)
       setSalaryHistory(salaryRecords)
+      setFoodAllowanceHistory(foodAllowanceRecords)
       if (history.length === 0 && salaryRecords.length > 0) {
         setHistoryActiveTab('salary')
+      } else if (history.length === 0 && salaryRecords.length === 0 && foodAllowanceRecords.length > 0) {
+        setHistoryActiveTab('food_allowance')
       }
     } catch (error) {
       console.error('Error fetching employment history:', error)
@@ -581,6 +636,7 @@ export function EmployeesTable({ searchQuery = '', onAddEmployeeTriggerRef }: Em
       setHistoryError(errorMessage)
       setEmploymentHistory([])
       setSalaryHistory([])
+      setFoodAllowanceHistory([])
     } finally {
       setHistoryLoading(false)
     }
@@ -657,6 +713,7 @@ export function EmployeesTable({ searchQuery = '', onAddEmployeeTriggerRef }: Em
               <TableHead className="font-semibold text-white h-12 px-4">Joining Date</TableHead>
               <TableHead className="font-semibold text-white h-12 px-4">Exit Date</TableHead>
               <TableHead className="font-semibold text-white h-12 px-4">Salary</TableHead>
+              <TableHead className="font-semibold text-white h-12 px-4">Food Allowance</TableHead>
               <TableHead className="font-semibold text-white h-12 px-4">Status</TableHead>
               <TableHead className="font-semibold text-white h-12 px-4 text-right">Actions</TableHead>
             </TableRow>
@@ -664,7 +721,7 @@ export function EmployeesTable({ searchQuery = '', onAddEmployeeTriggerRef }: Em
           <TableBody>
             {groupedEmployees.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={10} className="text-center py-12 text-gray-500">
+                <TableCell colSpan={11} className="text-center py-12 text-gray-500">
                   No employees found
                 </TableCell>
               </TableRow>
@@ -672,7 +729,7 @@ export function EmployeesTable({ searchQuery = '', onAddEmployeeTriggerRef }: Em
               groupedEmployees.map(({ category, employees: categoryEmployees }) => (
                 <React.Fragment key={category}>
                   <TableRow className="bg-[#23887C]/10 hover:bg-[#23887C]/10 border-t-2 border-[#23887C]">
-                    <TableCell colSpan={10} className="font-semibold text-[#23887C] py-4 px-4 text-base">
+                    <TableCell colSpan={11} className="font-semibold text-[#23887C] py-4 px-4 text-base">
                       {category}
                     </TableCell>
                   </TableRow>
@@ -706,6 +763,9 @@ export function EmployeesTable({ searchQuery = '', onAddEmployeeTriggerRef }: Em
                       </TableCell>
                       <TableCell className="text-gray-700 font-medium px-4 py-3">
                         {formatSalary(employee.salary)}
+                      </TableCell>
+                      <TableCell className="text-gray-700 font-medium px-4 py-3">
+                        {formatSalary(employee.food_allowance)}
                       </TableCell>
                       <TableCell className="px-4 py-3">
                         <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${getStatusBadgeColor(employee.status)}`}>
@@ -1108,7 +1168,7 @@ export function EmployeesTable({ searchQuery = '', onAddEmployeeTriggerRef }: Em
                     value={salary}
                     onChange={(e) => {
                       setSalary(e.target.value)
-                      if (!e.target.value || validateSalary(e.target.value)) {
+                      if (!e.target.value || validateAmount(e.target.value)) {
                         setSalaryError('')
                       }
                       if (!e.target.value) {
@@ -1166,6 +1226,77 @@ export function EmployeesTable({ searchQuery = '', onAddEmployeeTriggerRef }: Em
                     <p className="text-sm text-red-600 mt-1">{salaryEffectiveDateError}</p>
                   )}
                 </div>
+                <div className="space-y-2">
+                  <label htmlFor="add-food-allowance" className="text-sm font-medium text-gray-700 block">
+                    Food Allowance
+                  </label>
+                  <Input
+                    id="add-food-allowance"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    placeholder="0.00"
+                    value={foodAllowance}
+                    onChange={(e) => {
+                      setFoodAllowance(e.target.value)
+                      if (!e.target.value || validateAmount(e.target.value)) {
+                        setFoodAllowanceError('')
+                      }
+                      if (!e.target.value) {
+                        setFoodAllowanceEffectiveDateError('')
+                      }
+                    }}
+                    className={`h-11 border-gray-300 focus:border-[#23887C] focus:ring-[#23887C] focus:ring-1 ${
+                      foodAllowanceError ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : ''
+                    }`}
+                    disabled={isSubmitting}
+                  />
+                  {foodAllowanceError && (
+                    <p className="text-sm text-red-600 mt-1">{foodAllowanceError}</p>
+                  )}
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label htmlFor="add-food-allowance-effective-date" className="text-sm font-medium text-gray-700 block">
+                    Food Allowance Effective Date
+                  </label>
+                  <div className="relative w-full" ref={foodAllowanceEffectiveCalendarRef}>
+                    <Input
+                      id="add-food-allowance-effective-date"
+                      type="text"
+                      readOnly
+                      placeholder="Select food allowance date"
+                      value={foodAllowanceEffectiveDate ? format(foodAllowanceEffectiveDate, 'PPP') : ''}
+                      onClick={() => setShowFoodAllowanceEffectiveCalendar(!showFoodAllowanceEffectiveCalendar)}
+                      className={`h-11 w-full border-gray-300 focus:border-[#23887C] focus:ring-[#23887C] focus:ring-1 cursor-pointer pr-10 ${
+                        foodAllowanceEffectiveDateError ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : ''
+                      }`}
+                      disabled={isSubmitting || !foodAllowance}
+                    />
+                    <CalendarIcon className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+                    {showFoodAllowanceEffectiveCalendar && (
+                      <div className="absolute z-[100] mt-1 left-0 top-full bg-white border border-gray-300 rounded-md shadow-xl p-3">
+                        <Calendar
+                          mode="single"
+                          selected={foodAllowanceEffectiveDate}
+                          onSelect={(date) => {
+                            setFoodAllowanceEffectiveDate(date)
+                            setFoodAllowanceEffectiveDateError('')
+                            setShowFoodAllowanceEffectiveCalendar(false)
+                          }}
+                          disabled={isSubmitting}
+                          captionLayout="dropdown"
+                          fromYear={currentYear - 50}
+                          toYear={currentYear + 1}
+                        />
+                      </div>
+                    )}
+                  </div>
+                  {foodAllowanceEffectiveDateError && (
+                    <p className="text-sm text-red-600 mt-1">{foodAllowanceEffectiveDateError}</p>
+                  )}
+                </div>
               </div>
             </div>
             <DialogFooter className="gap-3">
@@ -1180,7 +1311,7 @@ export function EmployeesTable({ searchQuery = '', onAddEmployeeTriggerRef }: Em
               </Button>
               <Button
                 type="submit"
-                disabled={isSubmitting || isCheckingEmployeeId || !!employeeIdError || !!nameError || !!phoneError || !!salaryError || !!salaryEffectiveDateError}
+                disabled={isSubmitting || isCheckingEmployeeId || !!employeeIdError || !!nameError || !!phoneError || !!salaryError || !!salaryEffectiveDateError || !!foodAllowanceError || !!foodAllowanceEffectiveDateError}
                 className="bg-[#23887C] hover:bg-[#1f7569] text-white disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isSubmitting ? (
@@ -1440,7 +1571,7 @@ export function EmployeesTable({ searchQuery = '', onAddEmployeeTriggerRef }: Em
                     value={salary}
                     onChange={(e) => {
                       setSalary(e.target.value)
-                      if (e.target.value && !validateSalary(e.target.value)) {
+                      if (e.target.value && !validateAmount(e.target.value)) {
                         setSalaryError('Please enter a valid salary amount')
                       } else {
                         setSalaryError('')
@@ -1450,7 +1581,7 @@ export function EmployeesTable({ searchQuery = '', onAddEmployeeTriggerRef }: Em
                       }
                     }}
                     onBlur={() => {
-                      if (salary && !validateSalary(salary)) {
+                      if (salary && !validateAmount(salary)) {
                         setSalaryError('Please enter a valid salary amount')
                       }
                     }}
@@ -1480,7 +1611,7 @@ export function EmployeesTable({ searchQuery = '', onAddEmployeeTriggerRef }: Em
                       className={`h-11 w-full border-gray-300 focus:border-[#23887C] focus:ring-[#23887C] focus:ring-1 cursor-pointer pr-10 ${
                         salaryEffectiveDateError ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : ''
                       }`}
-                      disabled={isSubmitting || parseSalaryAmount(salary) === parseSalaryAmount(editingEmployee?.salary)}
+                      disabled={isSubmitting || parseAmount(salary) === parseAmount(editingEmployee?.salary)}
                     />
                     <CalendarIcon className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
                     {showSalaryEffectiveCalendar && (
@@ -1505,6 +1636,84 @@ export function EmployeesTable({ searchQuery = '', onAddEmployeeTriggerRef }: Em
                     <p className="text-sm text-red-600 mt-1">{salaryEffectiveDateError}</p>
                   )}
                 </div>
+                <div className="space-y-2">
+                  <label htmlFor="edit-food-allowance" className="text-sm font-medium text-gray-700 block">
+                    Food Allowance
+                  </label>
+                  <Input
+                    id="edit-food-allowance"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    placeholder="0.00"
+                    value={foodAllowance}
+                    onChange={(e) => {
+                      setFoodAllowance(e.target.value)
+                      if (e.target.value && !validateAmount(e.target.value)) {
+                        setFoodAllowanceError('Please enter a valid food allowance amount')
+                      } else {
+                        setFoodAllowanceError('')
+                      }
+                      if (!e.target.value) {
+                        setFoodAllowanceEffectiveDateError('')
+                      }
+                    }}
+                    onBlur={() => {
+                      if (foodAllowance && !validateAmount(foodAllowance)) {
+                        setFoodAllowanceError('Please enter a valid food allowance amount')
+                      }
+                    }}
+                    className={`h-11 border-gray-300 focus:border-[#23887C] focus:ring-[#23887C] focus:ring-1 ${
+                      foodAllowanceError ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : ''
+                    }`}
+                    disabled={isSubmitting}
+                  />
+                  {foodAllowanceError && (
+                    <p className="text-sm text-red-600 mt-1">{foodAllowanceError}</p>
+                  )}
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label htmlFor="edit-food-allowance-effective-date" className="text-sm font-medium text-gray-700 block">
+                    Food Allowance Effective Date
+                  </label>
+                  <div className="relative w-full" ref={foodAllowanceEffectiveCalendarRef}>
+                    <Input
+                      id="edit-food-allowance-effective-date"
+                      type="text"
+                      readOnly
+                      placeholder="Select food allowance date"
+                      value={foodAllowanceEffectiveDate ? format(foodAllowanceEffectiveDate, 'PPP') : ''}
+                      onClick={() => setShowFoodAllowanceEffectiveCalendar(!showFoodAllowanceEffectiveCalendar)}
+                      className={`h-11 w-full border-gray-300 focus:border-[#23887C] focus:ring-[#23887C] focus:ring-1 cursor-pointer pr-10 ${
+                        foodAllowanceEffectiveDateError ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : ''
+                      }`}
+                      disabled={isSubmitting || parseAmount(foodAllowance) === parseAmount(editingEmployee?.food_allowance)}
+                    />
+                    <CalendarIcon className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+                    {showFoodAllowanceEffectiveCalendar && (
+                      <div className="absolute z-[100] mt-1 left-0 top-full bg-white border border-gray-300 rounded-md shadow-xl p-3">
+                        <Calendar
+                          mode="single"
+                          selected={foodAllowanceEffectiveDate}
+                          onSelect={(date) => {
+                            setFoodAllowanceEffectiveDate(date)
+                            setFoodAllowanceEffectiveDateError('')
+                            setShowFoodAllowanceEffectiveCalendar(false)
+                          }}
+                          disabled={isSubmitting}
+                          captionLayout="dropdown"
+                          fromYear={currentYear - 50}
+                          toYear={currentYear + 1}
+                        />
+                      </div>
+                    )}
+                  </div>
+                  {foodAllowanceEffectiveDateError && (
+                    <p className="text-sm text-red-600 mt-1">{foodAllowanceEffectiveDateError}</p>
+                  )}
+                </div>
               </div>
             </div>
             <DialogFooter className="gap-3">
@@ -1519,7 +1728,7 @@ export function EmployeesTable({ searchQuery = '', onAddEmployeeTriggerRef }: Em
               </Button>
               <Button
                 type="submit"
-                disabled={isSubmitting || isCheckingEmployeeId || !!employeeIdError || !!nameError || !!phoneError || !!salaryError || !!salaryEffectiveDateError}
+                disabled={isSubmitting || isCheckingEmployeeId || !!employeeIdError || !!nameError || !!phoneError || !!salaryError || !!salaryEffectiveDateError || !!foodAllowanceError || !!foodAllowanceEffectiveDateError}
                 className="bg-[#23887C] hover:bg-[#1f7569] text-white disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isSubmitting ? (
@@ -1606,6 +1815,7 @@ export function EmployeesTable({ searchQuery = '', onAddEmployeeTriggerRef }: Em
             setHistoryEmployee(null)
             setEmploymentHistory([])
             setSalaryHistory([])
+            setFoodAllowanceHistory([])
             setHistoryError(null)
             setHistoryActiveTab('employment')
           }
@@ -1639,7 +1849,7 @@ export function EmployeesTable({ searchQuery = '', onAddEmployeeTriggerRef }: Em
                 <AlertTriangle className="h-8 w-8 text-red-500 mx-auto mb-3" />
                 <p className="text-sm text-red-600">{historyError}</p>
               </div>
-            ) : employmentHistory.length === 0 && salaryHistory.length === 0 ? (
+            ) : employmentHistory.length === 0 && salaryHistory.length === 0 && foodAllowanceHistory.length === 0 ? (
               <div className="py-8 text-center">
                 <History className="h-12 w-12 text-gray-400 mx-auto mb-3" />
                 <p className="text-sm text-gray-500">No employee history found</p>
@@ -1647,15 +1857,18 @@ export function EmployeesTable({ searchQuery = '', onAddEmployeeTriggerRef }: Em
             ) : (
               <Tabs
                 value={historyActiveTab}
-                onValueChange={(v) => setHistoryActiveTab(v as 'employment' | 'salary')}
+                onValueChange={(v) => setHistoryActiveTab(v as 'employment' | 'salary' | 'food_allowance')}
                 className="w-full gap-3"
               >
-                <TabsList className="grid w-full grid-cols-2 h-auto p-1">
+                <TabsList className="grid w-full grid-cols-3 h-auto p-1">
                   <TabsTrigger value="employment" className="flex-1">
                     Employment Periods
                   </TabsTrigger>
                   <TabsTrigger value="salary" className="flex-1">
                     Salary History
+                  </TabsTrigger>
+                  <TabsTrigger value="food_allowance" className="flex-1">
+                    Food Allowance History
                   </TabsTrigger>
                 </TabsList>
                 <TabsContent value="employment" className="mt-0">
@@ -1747,6 +1960,37 @@ export function EmployeesTable({ searchQuery = '', onAddEmployeeTriggerRef }: Em
                     )}
                   </div>
                 </TabsContent>
+                <TabsContent value="food_allowance" className="mt-0">
+                  <div className="max-h-[min(55vh,420px)] overflow-y-auto pr-1 space-y-3">
+                    {foodAllowanceHistory.length === 0 ? (
+                      <div className="py-10 text-center text-sm text-gray-500">
+                        No food allowance history recorded
+                      </div>
+                    ) : (
+                      foodAllowanceHistory.map((record) => (
+                        <div
+                          key={record.id}
+                          className="p-4 bg-gray-50 rounded-lg border border-gray-200 hover:border-[#23887C]/30 transition-colors"
+                        >
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <p className="text-xs text-gray-500 mb-1">Effective Date</p>
+                              <p className="text-sm font-medium text-gray-900">
+                                {format(new Date(record.effective_date), 'PPP')}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-500 mb-1">Food Allowance</p>
+                              <p className="text-sm font-semibold text-gray-900">
+                                {formatSalary(record.food_allowance)}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </TabsContent>
               </Tabs>
             )}
           </div>
@@ -1759,6 +2003,7 @@ export function EmployeesTable({ searchQuery = '', onAddEmployeeTriggerRef }: Em
                 setHistoryEmployee(null)
                 setEmploymentHistory([])
                 setSalaryHistory([])
+                setFoodAllowanceHistory([])
                 setHistoryError(null)
                 setHistoryActiveTab('employment')
               }}

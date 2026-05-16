@@ -13,6 +13,7 @@ export interface Employee {
   joining_date?: string
   exit_date?: string
   salary?: number | string
+  food_allowance?: number | string
   status: 'active' | 'terminated' | 'released' | 'resigned' | 'transferred' | string
   created_at: string
   updated_at: string
@@ -61,6 +62,8 @@ export function useEmployees() {
     exit_date?: string
     salary?: number | string
     salary_effective_date?: string
+    food_allowance?: number | string
+    food_allowance_effective_date?: string
     status?: string
   }) => {
     try {

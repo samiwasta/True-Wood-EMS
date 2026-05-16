@@ -19,6 +19,15 @@ export interface SalaryHistory {
   updated_at: string
 }
 
+export interface FoodAllowanceHistory {
+  id: string
+  employee_id: string
+  food_allowance: number | string
+  effective_date: string
+  created_at: string
+  updated_at: string
+}
+
 interface EmployeeForHistorySync {
   id: string
   joining_date?: string | null
@@ -34,17 +43,24 @@ interface EmployeeForSalarySync {
   created_at?: string | null
 }
 
+interface EmployeeForFoodAllowanceSync {
+  id: string
+  food_allowance?: number | string | null
+  joining_date?: string | null
+  created_at?: string | null
+}
+
 export class EmploymentHistoryService {
   private static toDateOnly(date?: string | null): string | null {
     return date ? date.split('T')[0].split(' ')[0] : null
   }
 
-  private static toSalaryNumber(salary?: number | string | null): number | null {
-    if (salary === null || salary === undefined || salary === '') {
+  private static toAmountNumber(amount?: number | string | null): number | null {
+    if (amount === null || amount === undefined || amount === '') {
       return null
     }
 
-    const value = typeof salary === 'string' ? parseFloat(salary) : salary
+    const value = typeof amount === 'string' ? parseFloat(amount) : amount
     return isNaN(value) ? null : value
   }
 
@@ -74,7 +90,10 @@ export class EmploymentHistoryService {
     return data ?? null
   }
 
-  private static getSalaryEffectiveDate(employee: EmployeeForSalarySync, effectiveDate?: string | null): string {
+  private static getEffectiveDate(
+    employee: EmployeeForSalarySync | EmployeeForFoodAllowanceSync,
+    effectiveDate?: string | null
+  ): string {
     return (
       this.toDateOnly(effectiveDate) ||
       this.toDateOnly(employee.joining_date) ||
@@ -170,7 +189,7 @@ export class EmploymentHistoryService {
     effectiveDate: string
   ): Promise<SalaryHistory> {
     try {
-      const salaryAmount = this.toSalaryNumber(salary)
+      const salaryAmount = this.toAmountNumber(salary)
       if (salaryAmount === null) {
         throw new Error('A valid salary amount is required')
       }
@@ -209,7 +228,7 @@ export class EmploymentHistoryService {
       throw new Error('Employee ID is required for syncing salary history')
     }
 
-    const salaryAmount = this.toSalaryNumber(employee.salary)
+    const salaryAmount = this.toAmountNumber(employee.salary)
     if (salaryAmount === null) {
       return null
     }
@@ -217,7 +236,90 @@ export class EmploymentHistoryService {
     return this.upsertSalaryHistory(
       employee.id,
       salaryAmount,
-      this.getSalaryEffectiveDate(employee, effectiveDate)
+      this.getEffectiveDate(employee, effectiveDate)
+    )
+  }
+
+  static async getFoodAllowanceHistory(employeeId: string): Promise<FoodAllowanceHistory[]> {
+    try {
+      if (!employeeId) {
+        console.error('Employee ID is required for fetching food allowance history')
+        return []
+      }
+
+      const { data, error } = await supabase
+        .from('employee_food_allowance_history')
+        .select('*')
+        .eq('employee_id', employeeId)
+        .order('effective_date', { ascending: false })
+        .order('created_at', { ascending: false })
+
+      if (error) {
+        console.error('Error fetching food allowance history:', error)
+        throw error
+      }
+
+      return data ?? []
+    } catch (error) {
+      console.error('Error fetching food allowance history:', error)
+      throw error
+    }
+  }
+
+  static async upsertFoodAllowanceHistory(
+    employeeId: string,
+    foodAllowance: number | string,
+    effectiveDate: string
+  ): Promise<FoodAllowanceHistory> {
+    try {
+      const amount = this.toAmountNumber(foodAllowance)
+      if (amount === null) {
+        throw new Error('A valid food allowance amount is required')
+      }
+
+      const { data, error } = await supabase
+        .from('employee_food_allowance_history')
+        .upsert(
+          {
+            employee_id: employeeId,
+            food_allowance: amount,
+            effective_date: effectiveDate,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'employee_id,effective_date' }
+        )
+        .select()
+        .single()
+
+      if (error) {
+        console.error('Error saving food allowance history:', error)
+        throw error
+      }
+
+      return data
+    } catch (error) {
+      console.error('Error saving food allowance history:', error)
+      throw error
+    }
+  }
+
+  static async syncCurrentFoodAllowanceHistory(
+    employee: EmployeeForFoodAllowanceSync,
+    effectiveDate?: string | null
+  ): Promise<FoodAllowanceHistory | null> {
+    if (!employee.id) {
+      throw new Error('Employee ID is required for syncing food allowance history')
+    }
+
+    const amount = this.toAmountNumber(employee.food_allowance)
+    if (amount === null) {
+      return null
+    }
+
+    return this.upsertFoodAllowanceHistory(
+      employee.id,
+      amount,
+      this.getEffectiveDate(employee, effectiveDate)
     )
   }
 
@@ -361,6 +463,42 @@ export class EmploymentHistoryService {
       return syncedCount
     } catch (error) {
       console.error('Error backfilling salary history:', error)
+      throw error
+    }
+  }
+
+  static async backfillFoodAllowanceHistory(): Promise<number> {
+    try {
+      const { data: employees, error: employeesError } = await supabase
+        .from('employees')
+        .select('id, food_allowance, joining_date, created_at')
+        .not('food_allowance', 'is', null)
+
+      if (employeesError) {
+        console.error('Error fetching employees:', employeesError)
+        throw employeesError
+      }
+
+      if (!employees || employees.length === 0) {
+        return 0
+      }
+
+      let syncedCount = 0
+
+      for (const employee of employees) {
+        try {
+          const history = await this.syncCurrentFoodAllowanceHistory(employee)
+          if (history) {
+            syncedCount++
+          }
+        } catch (error) {
+          console.error(`Error syncing food allowance history for employee ${employee.id}:`, error)
+        }
+      }
+
+      return syncedCount
+    } catch (error) {
+      console.error('Error backfilling food allowance history:', error)
       throw error
     }
   }

@@ -4,12 +4,12 @@ import { EmploymentHistoryService } from './employment-history.service'
 
 const NON_ACTIVE_EMPLOYEE_STATUSES = ['inactive', 'terminated', 'released', 'transferred', 'resigned']
 const todayDate = () => new Date().toISOString().split('T')[0]
-const toSalaryNumber = (salary: unknown): number | null => {
-  if (salary === null || salary === undefined || salary === '') {
+const toAmountNumber = (amount: unknown): number | null => {
+  if (amount === null || amount === undefined || amount === '') {
     return null
   }
 
-  const value = typeof salary === 'string' ? parseFloat(salary) : Number(salary)
+  const value = typeof amount === 'string' ? parseFloat(amount) : Number(amount)
   return isNaN(value) ? null : value
 }
 
@@ -105,7 +105,7 @@ export class EmployeeService {
 
       const { data: currentEmployee } = await supabase
         .from('employees')
-        .select('status, joining_date, exit_date, salary, created_at')
+        .select('status, joining_date, exit_date, salary, food_allowance, created_at')
         .eq('id', id)
         .single()
 
@@ -115,9 +115,18 @@ export class EmployeeService {
         : undefined
       delete normalizedUpdates.salary_effective_date
 
+      const foodAllowanceEffectiveDate = typeof normalizedUpdates.food_allowance_effective_date === 'string'
+        ? normalizedUpdates.food_allowance_effective_date
+        : undefined
+      delete normalizedUpdates.food_allowance_effective_date
+
       const hasSalaryUpdate = Object.prototype.hasOwnProperty.call(normalizedUpdates, 'salary')
-      const nextSalary = hasSalaryUpdate ? toSalaryNumber(normalizedUpdates.salary) : null
-      const currentSalary = toSalaryNumber(currentEmployee?.salary)
+      const nextSalary = hasSalaryUpdate ? toAmountNumber(normalizedUpdates.salary) : null
+      const currentSalary = toAmountNumber(currentEmployee?.salary)
+
+      const hasFoodAllowanceUpdate = Object.prototype.hasOwnProperty.call(normalizedUpdates, 'food_allowance')
+      const nextFoodAllowance = hasFoodAllowanceUpdate ? toAmountNumber(normalizedUpdates.food_allowance) : null
+      const currentFoodAllowance = toAmountNumber(currentEmployee?.food_allowance)
       const nextStatus = typeof normalizedUpdates.status === 'string'
         ? normalizedUpdates.status
         : currentEmployee?.status
@@ -189,6 +198,18 @@ export class EmployeeService {
                 created_at: data.created_at,
               },
               salaryEffectiveDate
+            )
+          }
+
+          if (hasFoodAllowanceUpdate && nextFoodAllowance !== null && nextFoodAllowance !== currentFoodAllowance) {
+            await EmploymentHistoryService.syncCurrentFoodAllowanceHistory(
+              {
+                id: data.id,
+                food_allowance: nextFoodAllowance,
+                joining_date: data.joining_date,
+                created_at: data.created_at,
+              },
+              foodAllowanceEffectiveDate
             )
           }
         } catch (historyError) {
@@ -309,6 +330,8 @@ export class EmployeeService {
     exit_date?: string
     salary?: number | string
     salary_effective_date?: string
+    food_allowance?: number | string
+    food_allowance_effective_date?: string
     status?: string
   }) {
     try {
@@ -346,9 +369,15 @@ export class EmployeeService {
         payload.exit_date = employeeData.exit_date || todayDate()
       }
       if (employeeData.salary !== null && employeeData.salary !== undefined && employeeData.salary !== '') {
-        const numSalary = toSalaryNumber(employeeData.salary)
+        const numSalary = toAmountNumber(employeeData.salary)
         if (numSalary !== null) {
           payload.salary = numSalary
+        }
+      }
+      if (employeeData.food_allowance !== null && employeeData.food_allowance !== undefined && employeeData.food_allowance !== '') {
+        const numFoodAllowance = toAmountNumber(employeeData.food_allowance)
+        if (numFoodAllowance !== null) {
+          payload.food_allowance = numFoodAllowance
         }
       }
 
@@ -394,6 +423,15 @@ export class EmployeeService {
               created_at: data.created_at,
             },
             employeeData.salary_effective_date
+          )
+          await EmploymentHistoryService.syncCurrentFoodAllowanceHistory(
+            {
+              id: data.id,
+              food_allowance: data.food_allowance,
+              joining_date: data.joining_date,
+              created_at: data.created_at,
+            },
+            employeeData.food_allowance_effective_date
           )
         } catch (historyError) {
           console.error('Error creating employment history:', historyError)
