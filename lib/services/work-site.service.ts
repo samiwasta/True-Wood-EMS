@@ -251,6 +251,66 @@ export class WorkSiteService {
     }
   }
 
+  static async updateWorkSiteTimesForDate(
+    workSiteId: string,
+    date: string,
+    timeIn: string | null,
+    timeOut: string | null,
+    breakHours: number | null
+  ) {
+    const { error: updateError } = await supabase
+      .from('work_sites')
+      .update({
+        time_in: timeIn,
+        time_out: timeOut,
+        break_hours: breakHours,
+      })
+      .eq('id', workSiteId)
+
+    if (updateError) {
+      console.error('Error updating work site times:', updateError)
+      throw updateError
+    }
+
+    const { data: existing } = await supabase
+      .from('work_site_time_history')
+      .select('id')
+      .eq('work_site_id', workSiteId)
+      .eq('effective_from', date)
+      .maybeSingle()
+
+    if (existing) {
+      const { error: historyUpdateError } = await supabase
+        .from('work_site_time_history')
+        .update({
+          time_in: timeIn,
+          time_out: timeOut,
+          break_hours: breakHours,
+        })
+        .eq('id', existing.id)
+
+      if (historyUpdateError) {
+        console.error('Error updating work site time history:', historyUpdateError)
+        throw historyUpdateError
+      }
+    } else {
+      const { error: historyInsertError } = await supabase
+        .from('work_site_time_history')
+        .insert({
+          work_site_id: workSiteId,
+          effective_from: date,
+          time_in: timeIn,
+          time_out: timeOut,
+          break_hours: breakHours,
+        })
+
+      if (historyInsertError) {
+        console.error('Error inserting work site time history:', historyInsertError)
+        throw historyInsertError
+      }
+    }
+  }
+
   /**
    * Get time_in and time_out for a work site on a given date (for correct overtime calculation).
    * Uses work_site_time_history when available; otherwise falls back to current work_sites times.

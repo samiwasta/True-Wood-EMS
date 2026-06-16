@@ -61,9 +61,6 @@ export function WorkSitesList() {
   const [status, setStatus] = useState<string>('active')
   const [startDate, setStartDate] = useState<Date | undefined>(undefined)
   const [endDate, setEndDate] = useState<Date | undefined>(undefined)
-  const [timeIn, setTimeIn] = useState('')
-  const [timeOut, setTimeOut] = useState('')
-  const [breakHours, setBreakHours] = useState('')
   const [editingWorkSite, setEditingWorkSite] = useState<WorkSite | null>(null)
   const [deletingWorkSite, setDeletingWorkSite] = useState<WorkSite | null>(null)
   const [historyWorkSite, setHistoryWorkSite] = useState<WorkSite | null>(null)
@@ -108,10 +105,7 @@ export function WorkSitesList() {
         status, 
         shortHand || undefined,
         startDate ? format(startDate, 'yyyy-MM-dd') : undefined,
-        endDate ? format(endDate, 'yyyy-MM-dd') : undefined,
-        timeIn || undefined,
-        timeOut || undefined,
-        breakHours.trim() ? parseFloat(breakHours) : undefined
+        endDate ? format(endDate, 'yyyy-MM-dd') : undefined
       )
       
       // Reset form and close dialog
@@ -121,9 +115,6 @@ export function WorkSitesList() {
       setStatus('active')
       setStartDate(undefined)
       setEndDate(undefined)
-      setTimeIn('')
-      setTimeOut('')
-      setBreakHours('')
       setIsAddDialogOpen(false)
     } catch (error) {
       console.error('Error adding work site:', error)
@@ -150,10 +141,7 @@ export function WorkSitesList() {
         status, 
         shortHand || undefined,
         startDate ? format(startDate, 'yyyy-MM-dd') : undefined,
-        endDate ? format(endDate, 'yyyy-MM-dd') : undefined,
-        timeIn || undefined,
-        timeOut || undefined,
-        breakHours.trim() ? parseFloat(breakHours) : undefined
+        endDate ? format(endDate, 'yyyy-MM-dd') : undefined
       )
       
       // Reset form and close dialog
@@ -163,9 +151,6 @@ export function WorkSitesList() {
       setStatus('active')
       setStartDate(undefined)
       setEndDate(undefined)
-      setTimeIn('')
-      setTimeOut('')
-      setBreakHours('')
       setEditingWorkSite(null)
       setIsEditDialogOpen(false)
     } catch (error) {
@@ -205,9 +190,6 @@ export function WorkSitesList() {
       setStatus('active')
       setStartDate(undefined)
       setEndDate(undefined)
-      setTimeIn('')
-      setTimeOut('')
-      setBreakHours('')
       setShowStartCalendar(false)
       setShowEndCalendar(false)
     }
@@ -221,9 +203,6 @@ export function WorkSitesList() {
     setStatus(workSite.status)
     setStartDate(workSite.start_date ? new Date(workSite.start_date) : undefined)
     setEndDate(workSite.end_date ? new Date(workSite.end_date) : undefined)
-    setTimeIn(workSite.time_in || '')
-    setTimeOut(workSite.time_out || '')
-    setBreakHours(workSite.break_hours != null ? String(workSite.break_hours) : '')
     setIsEditDialogOpen(true)
   }
 
@@ -236,9 +215,6 @@ export function WorkSitesList() {
       setStatus('active')
       setStartDate(undefined)
       setEndDate(undefined)
-      setTimeIn('')
-      setTimeOut('')
-      setBreakHours('')
       setEditingWorkSite(null)
       setShowStartCalendar(false)
       setShowEndCalendar(false)
@@ -470,60 +446,6 @@ export function WorkSitesList() {
                     )}
                   </div>
                 </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label 
-                    htmlFor="time-in" 
-                    className="text-sm font-medium text-gray-700 block"
-                  >
-                    Time In
-                  </label>
-                  <Input
-                    id="time-in"
-                    type="time"
-                    value={timeIn}
-                    onChange={(e) => setTimeIn(e.target.value)}
-                    className="h-11 border-gray-300 focus:border-[#23887C] focus:ring-[#23887C] focus:ring-1 transition-all duration-200"
-                    disabled={isSubmitting}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label 
-                    htmlFor="time-out" 
-                    className="text-sm font-medium text-gray-700 block"
-                  >
-                    Time Out
-                  </label>
-                  <Input
-                    id="time-out"
-                    type="time"
-                    value={timeOut}
-                    onChange={(e) => setTimeOut(e.target.value)}
-                    className="h-11 border-gray-300 focus:border-[#23887C] focus:ring-[#23887C] focus:ring-1 transition-all duration-200"
-                    disabled={isSubmitting}
-                  />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <label 
-                  htmlFor="break-hours" 
-                  className="text-sm font-medium text-gray-700 block"
-                >
-                  Break hours <span className="text-gray-400 text-xs">(Optional)</span>
-                </label>
-                <Input
-                  id="break-hours"
-                  type="number"
-                  min={0}
-                  step={0.5}
-                  placeholder="e.g. 1 or 1.5"
-                  value={breakHours}
-                  onChange={(e) => setBreakHours(e.target.value)}
-                  className="h-11 border-gray-300 focus:border-[#23887C] focus:ring-[#23887C] focus:ring-1 transition-all duration-200"
-                  disabled={isSubmitting}
-                />
-                <p className="text-xs text-gray-400 mt-1">Duration in hours (e.g. 1 for 1 hour, 1.5 for 1h 30m)</p>
               </div>
               <DialogFooter className="gap-3">
                 <Button
@@ -806,59 +728,6 @@ export function WorkSitesList() {
                   )}
                 </div>
               </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <label 
-                  htmlFor="edit-time-in" 
-                  className="text-sm font-medium text-gray-700 block"
-                >
-                  Time In
-                </label>
-                <Input
-                  id="edit-time-in"
-                  type="time"
-                  value={timeIn}
-                  onChange={(e) => setTimeIn(e.target.value)}
-                  className="h-11 border-gray-300 focus:border-[#23887C] focus:ring-[#23887C] focus:ring-1 transition-all duration-200"
-                  disabled={isSubmitting}
-                />
-              </div>
-              <div className="space-y-2">
-                <label 
-                  htmlFor="edit-time-out" 
-                  className="text-sm font-medium text-gray-700 block"
-                >
-                  Time Out
-                </label>
-                <Input
-                  id="edit-time-out"
-                  type="time"
-                  value={timeOut}
-                  onChange={(e) => setTimeOut(e.target.value)}
-                  className="h-11 border-gray-300 focus:border-[#23887C] focus:ring-[#23887C] focus:ring-1 transition-all duration-200"
-                  disabled={isSubmitting}
-                />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <label 
-                htmlFor="edit-break-hours" 
-                className="text-sm font-medium text-gray-700 block"
-              >
-                Break hours <span className="text-gray-400 text-xs">(Optional)</span>
-              </label>
-              <Input
-                id="edit-break-hours"
-                type="number"
-                min={0}
-                step={0.5}
-                placeholder="e.g. 1 or 1.5"
-                value={breakHours}
-                onChange={(e) => setBreakHours(e.target.value)}
-                className="h-11 border-gray-300 focus:border-[#23887C] focus:ring-[#23887C] focus:ring-1 transition-all duration-200"
-                disabled={isSubmitting}
-              />
             </div>
             <DialogFooter className="gap-3">
               <Button

@@ -132,6 +132,7 @@ export class AttendanceService {
    * @param workSiteId - Work site UUID (optional, for work site attendance)
    * @param timeIn - Manual override for time in (HH:mm format)
    * @param timeOut - Manual override for time out (HH:mm format)
+   * @param breakHours - Manual override for break hours
    */
   static async saveAttendance(
     employeeId: string,
@@ -140,7 +141,8 @@ export class AttendanceService {
     leaveTypeId?: string | null,
     workSiteId?: string | null,
     timeIn?: string | null,
-    timeOut?: string | null
+    timeOut?: string | null,
+    breakHours?: number | null
   ) {
     try {
       const { data: existingRecords, error: checkError } = await supabase
@@ -152,49 +154,52 @@ export class AttendanceService {
 
       const existing = existingRecords && existingRecords.length > 0 ? existingRecords[0] : null
 
-      // Auto-populate time_in and time_out based on status and work site
       let finalTimeIn = timeIn
       let finalTimeOut = timeOut
-      
-      // Only auto-populate if times are not explicitly provided and status is present
+      let finalBreakHours = breakHours
+
       if (status === 'present' && timeIn === undefined && timeOut === undefined) {
-        // If work site is assigned, get times from work site
         if (workSiteId) {
           const { data: workSite } = await supabase
             .from('work_sites')
-            .select('time_in, time_out')
+            .select('time_in, time_out, break_hours')
             .eq('id', workSiteId)
             .single()
-          
+
           if (workSite) {
             finalTimeIn = workSite.time_in || null
             finalTimeOut = workSite.time_out || null
+            if (breakHours === undefined) {
+              finalBreakHours = workSite.break_hours != null ? Number(workSite.break_hours) : null
+            }
           }
         } else {
-          // Otherwise, get times from employee's category
           const { data: employee } = await supabase
             .from('employees')
             .select('category_id')
             .eq('id', employeeId)
             .single()
-          
+
           if (employee?.category_id) {
             const { data: category } = await supabase
               .from('categories')
-              .select('time_in, time_out')
+              .select('time_in, time_out, break_hours')
               .eq('id', employee.category_id)
               .single()
-            
+
             if (category) {
               finalTimeIn = category.time_in || null
               finalTimeOut = category.time_out || null
+              if (breakHours === undefined) {
+                finalBreakHours = category.break_hours != null ? Number(category.break_hours) : null
+              }
             }
           }
         }
       } else if (status === 'absent' || status === 'leave') {
-        // Clear times for absent/leave if not explicitly provided
         if (timeIn === undefined) finalTimeIn = null
         if (timeOut === undefined) finalTimeOut = null
+        if (breakHours === undefined) finalBreakHours = null
       }
 
       const payload: Record<string, unknown> = {
@@ -206,6 +211,7 @@ export class AttendanceService {
       }
       if (finalTimeIn !== undefined) payload.time_in = finalTimeIn || null
       if (finalTimeOut !== undefined) payload.time_out = finalTimeOut || null
+      if (finalBreakHours !== undefined) payload.break_hours = finalBreakHours ?? null
 
       if (existing && !checkError) {
         const { data, error } = await supabase

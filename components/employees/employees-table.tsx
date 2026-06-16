@@ -25,7 +25,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Calendar } from '@/components/ui/calendar'
-import { Edit2, Trash2, AlertTriangle, CalendarIcon, CalendarDays } from 'lucide-react'
+import { Edit2, Trash2, AlertTriangle, CalendarIcon, CalendarDays, X } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -1412,9 +1412,25 @@ export function EmployeesTable({ searchQuery = '', onAddEmployeeTriggerRef }: Em
                       placeholder="Select exit date"
                       value={exitDate ? format(exitDate, 'PPP') : ''}
                       onClick={() => setShowExitCalendar(!showExitCalendar)}
-                      className="h-11 w-full border-gray-300 focus:border-[#23887C] focus:ring-[#23887C] focus:ring-1 cursor-pointer pr-10"
+                      className="h-11 w-full border-gray-300 focus:border-[#23887C] focus:ring-[#23887C] focus:ring-1 cursor-pointer pr-20"
                       disabled={isSubmitting}
                     />
+                    {exitDate && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setExitDate(undefined)
+                          setShowExitCalendar(false)
+                        }}
+                        className="absolute right-10 top-1/2 -translate-y-1/2 p-1 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+                        disabled={isSubmitting}
+                        title="Clear exit date"
+                        aria-label="Clear exit date"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    )}
                     <CalendarIcon className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
                     {showExitCalendar && (
                       <div className="absolute z-[100] mt-1 left-0 top-full bg-white border border-gray-300 rounded-md shadow-xl p-3">

@@ -5,9 +5,18 @@ import { useEmployees, Employee } from '@/lib/hooks/useEmployees'
 import { useLeaveTypes } from '@/lib/hooks/useLeaveTypes'
 import { useWorkSites } from '@/lib/hooks/useWorkSites'
 import { AttendanceService } from '@/lib/services/attendance.service'
+import { WorkSiteService } from '@/lib/services/work-site.service'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import {
   Popover,
   PopoverContent,
@@ -65,6 +74,12 @@ const getColorForInitials = (initials: string): { bg: string; text: string } => 
   return colors[index]
 }
 
+interface ProjectTimeEntry {
+  timeIn: string
+  timeOut: string
+  breakHours: string
+}
+
 export function AttendancePageContent() {
   const { employees, loading: employeesLoading } = useEmployees()
   const { leaveTypes, loading: leaveTypesLoading } = useLeaveTypes()
@@ -83,6 +98,9 @@ export function AttendancePageContent() {
   /** For leave popover: dates selected on calendar for bulk leave (keyed by employee.id) */
   const [leaveCalendarDates, setLeaveCalendarDates] = useState<Record<string, Date[]>>({})
   const [leaveBulkSaving, setLeaveBulkSaving] = useState(false)
+  const [timesDialogOpen, setTimesDialogOpen] = useState(false)
+  const [projectTimes, setProjectTimes] = useState<Record<string, ProjectTimeEntry>>({})
+  const [timesDialogLoading, setTimesDialogLoading] = useState(false)
 
   const debouncedSearch = useDebounce(searchQuery, 300)
 
@@ -196,14 +214,82 @@ export function AttendancePageContent() {
     }
   }
 
-  const handleSaveAll = async () => {
+  const handleOpenSaveDialog = async () => {
+    if (activeWorkSites.length === 0) {
+      await handleConfirmSave({})
+      return
+    }
+
+    setTimesDialogLoading(true)
+    setTimesDialogOpen(true)
+    try {
+      const dateStr = format(selectedDate, 'yyyy-MM-dd')
+      const timesOnDate = await WorkSiteService.getWorkSiteTimesForAllSitesOnDate(dateStr)
+      const initial: Record<string, ProjectTimeEntry> = {}
+      activeWorkSites.forEach((site) => {
+        const t = timesOnDate[site.id]
+        initial[site.id] = {
+          timeIn: t?.time_in || site.time_in || '',
+          timeOut: t?.time_out || site.time_out || '',
+          breakHours:
+            t?.break_hours != null
+              ? String(t.break_hours)
+              : site.break_hours != null
+                ? String(site.break_hours)
+                : '1',
+        }
+      })
+      setProjectTimes(initial)
+    } catch (error) {
+      console.error('Error loading project times:', error)
+      alert('Failed to load project times. Please try again.')
+      setTimesDialogOpen(false)
+    } finally {
+      setTimesDialogLoading(false)
+    }
+  }
+
+  const handleConfirmSave = async (times: Record<string, ProjectTimeEntry>) => {
     setSaving(true)
     try {
       const dateStr = format(selectedDate, 'yyyy-MM-dd')
-      const promises = Object.keys(attendanceRecords).map(employeeId => {
+      const activeWorkSiteIds = new Set(activeWorkSites.map((s) => s.id))
+
+      await Promise.all(
+        activeWorkSites.map((site) => {
+          const entry = times[site.id]
+          if (!entry) return Promise.resolve()
+          const breakHrs = entry.breakHours.trim() ? parseFloat(entry.breakHours) : 1
+          return WorkSiteService.updateWorkSiteTimesForDate(
+            site.id,
+            dateStr,
+            entry.timeIn.trim() || null,
+            entry.timeOut.trim() || null,
+            Number.isNaN(breakHrs) ? 1 : breakHrs
+          )
+        })
+      )
+
+      const promises = Object.keys(attendanceRecords).map((employeeId) => {
         const record = attendanceRecords[employeeId]
         const leaveTypeId = record.status === 'leave' ? selectedLeaveType[employeeId] : null
         const workSiteId = selectedWorkSite[employeeId] || null
+
+        if (record.status === 'present' && workSiteId && activeWorkSiteIds.has(workSiteId)) {
+          const entry = times[workSiteId]
+          const breakHrs = entry?.breakHours.trim() ? parseFloat(entry.breakHours) : 1
+          return AttendanceService.saveAttendance(
+            employeeId,
+            dateStr,
+            record.status,
+            leaveTypeId || undefined,
+            workSiteId || undefined,
+            entry?.timeIn.trim() || null,
+            entry?.timeOut.trim() || null,
+            Number.isNaN(breakHrs) ? 1 : breakHrs
+          )
+        }
+
         return AttendanceService.saveAttendance(
           employeeId,
           dateStr,
@@ -215,6 +301,7 @@ export function AttendancePageContent() {
 
       await Promise.all(promises)
       await fetchAttendance(selectedDate)
+      setTimesDialogOpen(false)
       alert('Attendance saved successfully!')
     } catch (error) {
       console.error('Error saving attendance:', error)
@@ -222,6 +309,28 @@ export function AttendancePageContent() {
     } finally {
       setSaving(false)
     }
+  }
+
+  const handleSaveAll = () => {
+    handleOpenSaveDialog()
+  }
+
+  const handleTimesDialogConfirm = () => {
+    handleConfirmSave(projectTimes)
+  }
+
+  const updateProjectTime = (
+    workSiteId: string,
+    field: keyof ProjectTimeEntry,
+    value: string
+  ) => {
+    setProjectTimes((prev) => ({
+      ...prev,
+      [workSiteId]: {
+        ...prev[workSiteId],
+        [field]: value,
+      },
+    }))
   }
 
   const handleReset = async () => {
@@ -490,6 +599,103 @@ export function AttendancePageContent() {
           </Button>
         </div>
       </div>
+
+      <Dialog open={timesDialogOpen} onOpenChange={setTimesDialogOpen}>
+        <DialogContent className="sm:max-w-[720px] max-h-[85vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-semibold text-gray-900">
+              Set Project Times
+            </DialogTitle>
+            <DialogDescription className="text-gray-500">
+              Set Time In, Time Out, and Break Hours for each active project on{' '}
+              {format(selectedDate, 'PPP')}. These times will be applied when saving attendance.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex-1 overflow-y-auto py-2">
+            {timesDialogLoading ? (
+              <div className="flex items-center justify-center py-12 text-gray-500">
+                <div className="h-6 w-6 border-2 border-[#23887C] border-t-transparent rounded-full animate-spin" />
+                <span className="ml-2">Loading project times...</span>
+              </div>
+            ) : (
+              <div className="border border-gray-200 rounded-lg overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead className="bg-[#23887C]">
+                    <tr>
+                      <th className="text-left font-semibold text-white px-4 py-3">Project</th>
+                      <th className="text-left font-semibold text-white px-4 py-3 w-32">Time In</th>
+                      <th className="text-left font-semibold text-white px-4 py-3 w-32">Time Out</th>
+                      <th className="text-left font-semibold text-white px-4 py-3 w-28">Break (hrs)</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {activeWorkSites.map((site) => {
+                      const entry = projectTimes[site.id] || { timeIn: '', timeOut: '', breakHours: '1' }
+                      return (
+                        <tr key={site.id} className="hover:bg-gray-50/50">
+                          <td className="px-4 py-3">
+                            <div className="font-medium text-gray-900">{site.name}</div>
+                            <div className="text-xs text-gray-500">{site.location}</div>
+                          </td>
+                          <td className="px-4 py-2">
+                            <Input
+                              type="time"
+                              value={entry.timeIn}
+                              onChange={(e) => updateProjectTime(site.id, 'timeIn', e.target.value)}
+                              className="h-9 border-gray-300"
+                              disabled={saving}
+                            />
+                          </td>
+                          <td className="px-4 py-2">
+                            <Input
+                              type="time"
+                              value={entry.timeOut}
+                              onChange={(e) => updateProjectTime(site.id, 'timeOut', e.target.value)}
+                              className="h-9 border-gray-300"
+                              disabled={saving}
+                            />
+                          </td>
+                          <td className="px-4 py-2">
+                            <Input
+                              type="number"
+                              min={0}
+                              step={0.5}
+                              value={entry.breakHours}
+                              onChange={(e) => updateProjectTime(site.id, 'breakHours', e.target.value)}
+                              className="h-9 border-gray-300"
+                              disabled={saving}
+                            />
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+          <DialogFooter className="gap-3">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setTimesDialogOpen(false)}
+              disabled={saving}
+              className="border-gray-300 text-gray-700 hover:bg-gray-50"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={handleTimesDialogConfirm}
+              disabled={saving || timesDialogLoading}
+              className="bg-[#23887C] hover:bg-[#1f7569] text-white"
+            >
+              <Save className="h-4 w-4 mr-2" />
+              {saving ? 'Saving...' : 'Save Attendance'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
         <div className="overflow-x-auto">
