@@ -30,6 +30,7 @@ import { useDebounce } from '@/lib/hooks/useDebounce'
 const predefinedCategoryOrder = ['Worker Staff', 'Dubai Staff', 'Daily Basis Staff', 'Office Staff']
 
 const WAREHOUSE_KEY = '__warehouse__'
+const WORKER_STAFF_CATEGORY = 'worker staff'
 
 const getCategoryOrder = (categoryName?: string): number => {
   if (!categoryName) return 999
@@ -108,6 +109,12 @@ export function AttendancePageContent() {
 
   const activeWorkSites = workSites.filter(site => site.status === 'active')
   const completedWorkSites = workSites.filter(site => site.status === 'completed')
+
+  const isWorkerStaffEmployee = (employeeId: string): boolean => {
+    const employee = employees.find((e) => e.id === employeeId)
+    const categoryName = employee?.category?.name || ''
+    return categoryName.toLowerCase() === WORKER_STAFF_CATEGORY
+  }
 
   const fetchAttendance = async (date: Date) => {
     setLoading(true)
@@ -239,8 +246,11 @@ export function AttendancePageContent() {
       const initial: Record<string, ProjectTimeEntry> = {}
 
       const warehouseRecord = attendanceForDate.find(
-        (r: { status: string; work_site_id?: string | null }) =>
-          r.status === 'present' && !r.work_site_id
+        (r: { status: string; work_site_id?: string | null; employee_id?: string }) =>
+          r.status === 'present' &&
+          !r.work_site_id &&
+          !!r.employee_id &&
+          isWorkerStaffEmployee(r.employee_id)
       ) as { time_in?: string | null; time_out?: string | null; break_hours?: number | null } | undefined
 
       initial[WAREHOUSE_KEY] = {
@@ -314,7 +324,7 @@ export function AttendancePageContent() {
           )
         }
 
-        if (record.status === 'present' && !workSiteId) {
+        if (record.status === 'present' && !workSiteId && isWorkerStaffEmployee(employeeId)) {
           const entry = times[WAREHOUSE_KEY]
           const breakHrs = entry?.breakHours.trim() ? parseFloat(entry.breakHours) : 1
           return AttendanceService.saveAttendance(
@@ -646,8 +656,9 @@ export function AttendancePageContent() {
               Set Project & Warehouse Times
             </DialogTitle>
             <DialogDescription className="text-gray-500">
-              Set Time In, Time Out, and Break Hours for warehouse staff and each active project on{' '}
-              {format(selectedDate, 'PPP')}. These times will be applied when saving attendance.
+              Set Time In, Time Out, and Break Hours for Worker Staff at the warehouse and each active
+              project on {format(selectedDate, 'PPP')}. These times will be applied when saving
+              attendance.
             </DialogDescription>
           </DialogHeader>
           <div className="flex-1 overflow-y-auto py-2">
@@ -683,7 +694,7 @@ export function AttendancePageContent() {
                               </div>
                               <div>
                                 <div className="font-medium text-gray-900">Warehouse</div>
-                                <div className="text-xs text-gray-500">Employees without a project</div>
+                                <div className="text-xs text-gray-500">Worker Staff without a project</div>
                               </div>
                             </div>
                           </td>
