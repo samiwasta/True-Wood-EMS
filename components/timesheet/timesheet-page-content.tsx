@@ -412,8 +412,9 @@ export function TimesheetPageContent() {
     return cat?.time_out ?? ''
   }
 
-  /** Get expected time_in: from work site or category (NOT from timesheet edits) */
+  /** Get expected time_in: from saved record, work site on date, or category */
   const getExpectedStartTime = (employee: Employee, record: TimesheetRecord | undefined) => {
+    if (record?.time_in) return record.time_in
     if (record?.work_site_id) {
       const times = workSiteTimesOnDate[record.work_site_id]
       if (times?.time_in) return times.time_in
@@ -425,8 +426,9 @@ export function TimesheetPageContent() {
     return cat?.time_in ?? null
   }
 
-  /** Get expected time_out: from work site or category (NOT from timesheet edits) */
+  /** Get expected time_out: from saved record, work site on date, or category */
   const getExpectedEndTime = (employee: Employee, record: TimesheetRecord | undefined) => {
+    if (record?.time_out) return record.time_out
     if (record?.work_site_id) {
       const times = workSiteTimesOnDate[record.work_site_id]
       if (times?.time_out) return times.time_out
@@ -477,6 +479,7 @@ export function TimesheetPageContent() {
     record: TimesheetRecord,
     dateStr: string
   ): string | null => {
+    if (record.time_in) return record.time_in
     const byDate = workSiteTimesByDate[dateStr]
     if (record.work_site_id && byDate?.[record.work_site_id]?.time_in != null)
       return byDate[record.work_site_id].time_in
@@ -494,6 +497,7 @@ export function TimesheetPageContent() {
     record: TimesheetRecord,
     dateStr: string
   ): string | null => {
+    if (record.time_out) return record.time_out
     const byDate = workSiteTimesByDate[dateStr]
     if (record.work_site_id && byDate?.[record.work_site_id]?.time_out != null)
       return byDate[record.work_site_id].time_out

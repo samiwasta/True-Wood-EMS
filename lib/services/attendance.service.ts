@@ -90,6 +90,7 @@ export class AttendanceService {
             work_site_id,
             time_in,
             time_out,
+            break_hours,
             employee:employees(id, employee_id, name)
           `)
           .eq('date', date)
@@ -133,6 +134,7 @@ export class AttendanceService {
    * @param timeIn - Manual override for time in (HH:mm format)
    * @param timeOut - Manual override for time out (HH:mm format)
    * @param breakHours - Manual override for break hours
+   * @param deferTimes - When true for present status, skip setting time fields (deferred to Save Attendance)
    */
   static async saveAttendance(
     employeeId: string,
@@ -142,7 +144,8 @@ export class AttendanceService {
     workSiteId?: string | null,
     timeIn?: string | null,
     timeOut?: string | null,
-    breakHours?: number | null
+    breakHours?: number | null,
+    deferTimes?: boolean
   ) {
     try {
       const { data: existingRecords, error: checkError } = await supabase
@@ -158,48 +161,54 @@ export class AttendanceService {
       let finalTimeOut = timeOut
       let finalBreakHours = breakHours
 
-      if (status === 'present' && timeIn === undefined && timeOut === undefined) {
-        if (workSiteId) {
-          const { data: workSite } = await supabase
-            .from('work_sites')
-            .select('time_in, time_out, break_hours')
-            .eq('id', workSiteId)
-            .single()
-
-          if (workSite) {
-            finalTimeIn = workSite.time_in || null
-            finalTimeOut = workSite.time_out || null
-            if (breakHours === undefined) {
-              finalBreakHours = workSite.break_hours != null ? Number(workSite.break_hours) : null
-            }
-          }
-        } else {
-          const { data: employee } = await supabase
-            .from('employees')
-            .select('category_id')
-            .eq('id', employeeId)
-            .single()
-
-          if (employee?.category_id) {
-            const { data: category } = await supabase
-              .from('categories')
+      if (!deferTimes) {
+        if (status === 'present' && timeIn === undefined && timeOut === undefined) {
+          if (workSiteId) {
+            const { data: workSite } = await supabase
+              .from('work_sites')
               .select('time_in, time_out, break_hours')
-              .eq('id', employee.category_id)
+              .eq('id', workSiteId)
               .single()
 
-            if (category) {
-              finalTimeIn = category.time_in || null
-              finalTimeOut = category.time_out || null
+            if (workSite) {
+              finalTimeIn = workSite.time_in || null
+              finalTimeOut = workSite.time_out || null
               if (breakHours === undefined) {
-                finalBreakHours = category.break_hours != null ? Number(category.break_hours) : null
+                finalBreakHours = workSite.break_hours != null ? Number(workSite.break_hours) : null
+              }
+            }
+          } else {
+            const { data: employee } = await supabase
+              .from('employees')
+              .select('category_id')
+              .eq('id', employeeId)
+              .single()
+
+            if (employee?.category_id) {
+              const { data: category } = await supabase
+                .from('categories')
+                .select('time_in, time_out, break_hours')
+                .eq('id', employee.category_id)
+                .single()
+
+              if (category) {
+                finalTimeIn = category.time_in || null
+                finalTimeOut = category.time_out || null
+                if (breakHours === undefined) {
+                  finalBreakHours = category.break_hours != null ? Number(category.break_hours) : null
+                }
               }
             }
           }
+        } else if (status === 'absent' || status === 'leave') {
+          if (timeIn === undefined) finalTimeIn = null
+          if (timeOut === undefined) finalTimeOut = null
+          if (breakHours === undefined) finalBreakHours = null
         }
       } else if (status === 'absent' || status === 'leave') {
-        if (timeIn === undefined) finalTimeIn = null
-        if (timeOut === undefined) finalTimeOut = null
-        if (breakHours === undefined) finalBreakHours = null
+        finalTimeIn = null
+        finalTimeOut = null
+        finalBreakHours = null
       }
 
       const payload: Record<string, unknown> = {
@@ -209,9 +218,11 @@ export class AttendanceService {
         leave_type_id: status === 'leave' ? (leaveTypeId || null) : null,
         work_site_id: workSiteId || null,
       }
-      if (finalTimeIn !== undefined) payload.time_in = finalTimeIn || null
-      if (finalTimeOut !== undefined) payload.time_out = finalTimeOut || null
-      if (finalBreakHours !== undefined) payload.break_hours = finalBreakHours ?? null
+      if (!deferTimes || status === 'absent' || status === 'leave') {
+        if (finalTimeIn !== undefined) payload.time_in = finalTimeIn || null
+        if (finalTimeOut !== undefined) payload.time_out = finalTimeOut || null
+        if (finalBreakHours !== undefined) payload.break_hours = finalBreakHours ?? null
+      }
 
       if (existing && !checkError) {
         const { data, error } = await supabase

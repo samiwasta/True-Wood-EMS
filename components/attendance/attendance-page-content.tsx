@@ -22,12 +22,14 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover'
-import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Save, RotateCcw, CheckCircle2, XCircle, CalendarDays, Building2, Wrench, Search, X } from 'lucide-react'
+import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Save, RotateCcw, CheckCircle2, XCircle, CalendarDays, Building2, Wrench, Search, X, Warehouse } from 'lucide-react'
 import { Calendar } from '@/components/ui/calendar'
 import { format, addDays } from 'date-fns'
 import { useDebounce } from '@/lib/hooks/useDebounce'
 
 const predefinedCategoryOrder = ['Worker Staff', 'Dubai Staff', 'Daily Basis Staff', 'Office Staff']
+
+const WAREHOUSE_KEY = '__warehouse__'
 
 const getCategoryOrder = (categoryName?: string): number => {
   if (!categoryName) return 999
@@ -164,7 +166,17 @@ export function AttendancePageContent() {
     const workSiteId = workSiteIdOverride || selectedWorkSite[employeeId] || null
 
     try {
-      const savedRecord = await AttendanceService.saveAttendance(employeeId, dateStr, status, leaveTypeId || undefined, workSiteId || undefined)
+      const savedRecord = await AttendanceService.saveAttendance(
+        employeeId,
+        dateStr,
+        status,
+        leaveTypeId || undefined,
+        workSiteId || undefined,
+        undefined,
+        undefined,
+        undefined,
+        status === 'present'
+      )
       
       // Update local state immediately for instant feedback
       setAttendanceRecords(prev => ({
@@ -215,17 +227,29 @@ export function AttendancePageContent() {
   }
 
   const handleOpenSaveDialog = async () => {
-    if (activeWorkSites.length === 0) {
-      await handleConfirmSave({})
-      return
-    }
-
     setTimesDialogLoading(true)
     setTimesDialogOpen(true)
     try {
       const dateStr = format(selectedDate, 'yyyy-MM-dd')
-      const timesOnDate = await WorkSiteService.getWorkSiteTimesForAllSitesOnDate(dateStr)
+      const [timesOnDate, attendanceForDate] = await Promise.all([
+        WorkSiteService.getWorkSiteTimesForAllSitesOnDate(dateStr),
+        AttendanceService.getAttendanceByDate(dateStr),
+      ])
+
       const initial: Record<string, ProjectTimeEntry> = {}
+
+      const warehouseRecord = attendanceForDate.find(
+        (r: { status: string; work_site_id?: string | null }) =>
+          r.status === 'present' && !r.work_site_id
+      ) as { time_in?: string | null; time_out?: string | null; break_hours?: number | null } | undefined
+
+      initial[WAREHOUSE_KEY] = {
+        timeIn: warehouseRecord?.time_in || '',
+        timeOut: warehouseRecord?.time_out || '',
+        breakHours:
+          warehouseRecord?.break_hours != null ? String(warehouseRecord.break_hours) : '1',
+      }
+
       activeWorkSites.forEach((site) => {
         const t = timesOnDate[site.id]
         initial[site.id] = {
@@ -273,7 +297,7 @@ export function AttendancePageContent() {
       const promises = Object.keys(attendanceRecords).map((employeeId) => {
         const record = attendanceRecords[employeeId]
         const leaveTypeId = record.status === 'leave' ? selectedLeaveType[employeeId] : null
-        const workSiteId = selectedWorkSite[employeeId] || null
+        const workSiteId = selectedWorkSite[employeeId] ?? record.work_site_id ?? null
 
         if (record.status === 'present' && workSiteId && activeWorkSiteIds.has(workSiteId)) {
           const entry = times[workSiteId]
@@ -284,6 +308,21 @@ export function AttendancePageContent() {
             record.status,
             leaveTypeId || undefined,
             workSiteId || undefined,
+            entry?.timeIn.trim() || null,
+            entry?.timeOut.trim() || null,
+            Number.isNaN(breakHrs) ? 1 : breakHrs
+          )
+        }
+
+        if (record.status === 'present' && !workSiteId) {
+          const entry = times[WAREHOUSE_KEY]
+          const breakHrs = entry?.breakHours.trim() ? parseFloat(entry.breakHours) : 1
+          return AttendanceService.saveAttendance(
+            employeeId,
+            dateStr,
+            record.status,
+            leaveTypeId || undefined,
+            undefined,
             entry?.timeIn.trim() || null,
             entry?.timeOut.trim() || null,
             Number.isNaN(breakHrs) ? 1 : breakHrs
@@ -604,10 +643,10 @@ export function AttendancePageContent() {
         <DialogContent className="sm:max-w-[720px] max-h-[85vh] flex flex-col">
           <DialogHeader>
             <DialogTitle className="text-xl font-semibold text-gray-900">
-              Set Project Times
+              Set Project & Warehouse Times
             </DialogTitle>
             <DialogDescription className="text-gray-500">
-              Set Time In, Time Out, and Break Hours for each active project on{' '}
+              Set Time In, Time Out, and Break Hours for warehouse staff and each active project on{' '}
               {format(selectedDate, 'PPP')}. These times will be applied when saving attendance.
             </DialogDescription>
           </DialogHeader>
@@ -629,6 +668,57 @@ export function AttendancePageContent() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
+                    {(() => {
+                      const warehouseEntry = projectTimes[WAREHOUSE_KEY] || {
+                        timeIn: '',
+                        timeOut: '',
+                        breakHours: '1',
+                      }
+                      return (
+                        <tr className="hover:bg-gray-50/50 bg-amber-50/30">
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-2">
+                              <div className="h-8 w-8 rounded-md bg-amber-500 text-white flex items-center justify-center flex-shrink-0">
+                                <Warehouse className="h-4 w-4" />
+                              </div>
+                              <div>
+                                <div className="font-medium text-gray-900">Warehouse</div>
+                                <div className="text-xs text-gray-500">Employees without a project</div>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-4 py-2">
+                            <Input
+                              type="time"
+                              value={warehouseEntry.timeIn}
+                              onChange={(e) => updateProjectTime(WAREHOUSE_KEY, 'timeIn', e.target.value)}
+                              className="h-9 border-gray-300"
+                              disabled={saving}
+                            />
+                          </td>
+                          <td className="px-4 py-2">
+                            <Input
+                              type="time"
+                              value={warehouseEntry.timeOut}
+                              onChange={(e) => updateProjectTime(WAREHOUSE_KEY, 'timeOut', e.target.value)}
+                              className="h-9 border-gray-300"
+                              disabled={saving}
+                            />
+                          </td>
+                          <td className="px-4 py-2">
+                            <Input
+                              type="number"
+                              min={0}
+                              step={0.5}
+                              value={warehouseEntry.breakHours}
+                              onChange={(e) => updateProjectTime(WAREHOUSE_KEY, 'breakHours', e.target.value)}
+                              className="h-9 border-gray-300"
+                              disabled={saving}
+                            />
+                          </td>
+                        </tr>
+                      )
+                    })()}
                     {activeWorkSites.map((site) => {
                       const entry = projectTimes[site.id] || { timeIn: '', timeOut: '', breakHours: '1' }
                       return (
