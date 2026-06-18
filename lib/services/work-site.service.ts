@@ -258,20 +258,6 @@ export class WorkSiteService {
     timeOut: string | null,
     breakHours: number | null
   ) {
-    const { error: updateError } = await supabase
-      .from('work_sites')
-      .update({
-        time_in: timeIn,
-        time_out: timeOut,
-        break_hours: breakHours,
-      })
-      .eq('id', workSiteId)
-
-    if (updateError) {
-      console.error('Error updating work site times:', updateError)
-      throw updateError
-    }
-
     const { data: existing } = await supabase
       .from('work_site_time_history')
       .select('id')
@@ -338,21 +324,7 @@ export class WorkSiteService {
         }
       }
 
-      const { data: site, error: siteError } = await supabase
-        .from('work_sites')
-        .select('time_in, time_out, break_hours')
-        .eq('id', workSiteId)
-        .maybeSingle()
-
-      if (siteError || !site) {
-        return { time_in: null, time_out: null, break_hours: null }
-      }
-      const bh = site.break_hours != null ? Number(site.break_hours) : null
-      return {
-        time_in: site.time_in ?? null,
-        time_out: site.time_out ?? null,
-        break_hours: bh != null && !Number.isNaN(bh) ? bh : null,
-      }
+      return { time_in: null, time_out: null, break_hours: null }
     } catch (error) {
       console.error('Error fetching work site times for date:', error)
       return { time_in: null, time_out: null, break_hours: null }
@@ -385,24 +357,6 @@ export class WorkSiteService {
             bySite[id] = {
               time_in: row.time_in ?? null,
               time_out: row.time_out ?? null,
-              break_hours: bh != null && !Number.isNaN(bh) ? bh : null,
-            }
-          }
-        }
-      }
-
-      const { data: sites, error: sitesError } = await supabase
-        .from('work_sites')
-        .select('id, time_in, time_out, break_hours')
-
-      if (!sitesError && sites) {
-        for (const site of sites) {
-          const id = site.id as string
-          if (id && !bySite[id]) {
-            const bh = site.break_hours != null ? Number(site.break_hours) : null
-            bySite[id] = {
-              time_in: site.time_in ?? null,
-              time_out: site.time_out ?? null,
               break_hours: bh != null && !Number.isNaN(bh) ? bh : null,
             }
           }

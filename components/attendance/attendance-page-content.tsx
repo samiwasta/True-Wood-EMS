@@ -262,14 +262,19 @@ export function AttendancePageContent() {
 
       activeWorkSites.forEach((site) => {
         const t = timesOnDate[site.id]
+        const projectRecord = attendanceForDate.find(
+          (r: { status: string; work_site_id?: string | null; time_in?: string | null }) =>
+            r.status === 'present' && r.work_site_id === site.id && r.time_in
+        ) as { time_in?: string | null; time_out?: string | null; break_hours?: number | null } | undefined
+
         initial[site.id] = {
-          timeIn: t?.time_in || site.time_in || '',
-          timeOut: t?.time_out || site.time_out || '',
+          timeIn: t?.time_in || projectRecord?.time_in || '',
+          timeOut: t?.time_out || projectRecord?.time_out || '',
           breakHours:
             t?.break_hours != null
               ? String(t.break_hours)
-              : site.break_hours != null
-                ? String(site.break_hours)
+              : projectRecord?.break_hours != null
+                ? String(projectRecord.break_hours)
                 : '1',
         }
       })

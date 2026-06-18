@@ -390,22 +390,18 @@ export function TimesheetPageContent() {
     if (record?.work_site_id) {
       const times = workSiteTimesOnDate[record.work_site_id]
       if (times?.time_in) return times.time_in
-      const ws = workSiteMap[record.work_site_id]
-      if (ws?.time_in) return ws.time_in
     }
     const catId = employee.category_id || employee.category?.id
     const cat = catId ? categoryMap[catId] : null
     return cat?.time_in ?? ''
   }
 
-  /** Get actual time_out: from timesheet record (can be edited), work site, or category */
+  /** Get actual time_out: from timesheet record (can be edited), work site on date, or category */
   const getDefaultTimeOut = (employee: Employee, record: TimesheetRecord | undefined) => {
     if (record?.time_out) return record.time_out
     if (record?.work_site_id) {
       const times = workSiteTimesOnDate[record.work_site_id]
       if (times?.time_out) return times.time_out
-      const ws = workSiteMap[record.work_site_id]
-      if (ws?.time_out) return ws.time_out
     }
     const catId = employee.category_id || employee.category?.id
     const cat = catId ? categoryMap[catId] : null
@@ -418,8 +414,6 @@ export function TimesheetPageContent() {
     if (record?.work_site_id) {
       const times = workSiteTimesOnDate[record.work_site_id]
       if (times?.time_in) return times.time_in
-      const ws = workSiteMap[record.work_site_id]
-      if (ws?.time_in) return ws.time_in
     }
     const catId = employee.category_id || employee.category?.id
     const cat = catId ? categoryMap[catId] : null
@@ -432,22 +426,18 @@ export function TimesheetPageContent() {
     if (record?.work_site_id) {
       const times = workSiteTimesOnDate[record.work_site_id]
       if (times?.time_out) return times.time_out
-      const ws = workSiteMap[record.work_site_id]
-      if (ws?.time_out) return ws.time_out
     }
     const catId = employee.category_id || employee.category?.id
     const cat = catId ? categoryMap[catId] : null
     return cat?.time_out ?? null
   }
 
-  /** Break hours for display and overtime: from record, work site (on date), or category. */
+  /** Break hours for display and overtime: from record, work site on date, or category. */
   const getBreakHours = (employee: Employee, record: TimesheetRecord | undefined): number => {
     if (record?.break_hours != null) return record.break_hours
     if (record?.work_site_id) {
       const times = workSiteTimesOnDate[record.work_site_id]
       if (times?.break_hours != null) return times.break_hours
-      const ws = workSiteMap[record.work_site_id]
-      if (ws?.break_hours != null) return ws.break_hours
     }
     const catId = employee.category_id || employee.category?.id
     const cat = catId ? categoryMap[catId] : null
@@ -464,10 +454,6 @@ export function TimesheetPageContent() {
     const byDate = workSiteTimesByDate[dateStr]
     if (record.work_site_id && byDate?.[record.work_site_id]?.break_hours != null)
       return byDate[record.work_site_id].break_hours!
-    if (record.work_site_id) {
-      const ws = workSiteMap[record.work_site_id]
-      if (ws?.break_hours != null) return ws.break_hours
-    }
     const catId = employee.category_id || employee.category?.id
     const cat = catId ? categoryMap[catId] : null
     return cat?.break_hours ?? 0
@@ -483,10 +469,6 @@ export function TimesheetPageContent() {
     const byDate = workSiteTimesByDate[dateStr]
     if (record.work_site_id && byDate?.[record.work_site_id]?.time_in != null)
       return byDate[record.work_site_id].time_in
-    if (record.work_site_id) {
-      const ws = workSiteMap[record.work_site_id]
-      if (ws?.time_in) return ws.time_in
-    }
     const catId = employee.category_id || employee.category?.id
     const cat = catId ? categoryMap[catId] : null
     return cat?.time_in ?? null
@@ -501,22 +483,16 @@ export function TimesheetPageContent() {
     const byDate = workSiteTimesByDate[dateStr]
     if (record.work_site_id && byDate?.[record.work_site_id]?.time_out != null)
       return byDate[record.work_site_id].time_out
-    if (record.work_site_id) {
-      const ws = workSiteMap[record.work_site_id]
-      if (ws?.time_out) return ws.time_out
-    }
     const catId = employee.category_id || employee.category?.id
     const cat = catId ? categoryMap[catId] : null
     return cat?.time_out ?? null
   }
 
-  /** Default time in/out for a record (monthly: from record or work site/category for that date). */
+  /** Default time in/out for a record (monthly: from record or work site on date, or category). */
   const getTimeInForRecord = (employee: Employee, record: TimesheetRecord, dateStr: string): string => {
     if (record.time_in) return record.time_in
     const byDate = workSiteTimesByDate[dateStr]
     if (record.work_site_id && byDate?.[record.work_site_id]?.time_in) return byDate[record.work_site_id].time_in!
-    if (record.work_site_id && workSiteMap[record.work_site_id]?.time_in)
-      return workSiteMap[record.work_site_id].time_in!
     const catId = employee.category_id || employee.category?.id
     const cat = catId ? categoryMap[catId] : null
     return cat?.time_in ?? ''
@@ -526,8 +502,6 @@ export function TimesheetPageContent() {
     if (record.time_out) return record.time_out
     const byDate = workSiteTimesByDate[dateStr]
     if (record.work_site_id && byDate?.[record.work_site_id]?.time_out) return byDate[record.work_site_id].time_out!
-    if (record.work_site_id && workSiteMap[record.work_site_id]?.time_out)
-      return workSiteMap[record.work_site_id].time_out!
     const catId = employee.category_id || employee.category?.id
     const cat = catId ? categoryMap[catId] : null
     return cat?.time_out ?? ''
