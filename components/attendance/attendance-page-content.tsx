@@ -810,7 +810,7 @@ export function AttendancePageContent() {
               <tr>
                 <th className="px-6 py-4 text-left text-sm font-semibold text-white w-1/4">Employee ID</th>
                 <th className="px-6 py-4 text-left text-sm font-semibold text-white w-1/4">Name</th>
-                <th className="px-6 py-4 text-center text-sm font-semibold text-white w-2/4">Status</th>
+                <th className="px-6 py-4 text-center text-sm font-semibold text-white min-w-[42rem]">Status</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
@@ -846,8 +846,8 @@ export function AttendancePageContent() {
                       <td className="px-6 py-4 text-sm text-gray-900">
                         {employee.name}
                       </td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center justify-end gap-2 flex-wrap">
+                      <td className="px-6 py-4 min-w-[42rem]">
+                        <div className="flex items-center justify-end gap-1.5 flex-nowrap w-max ml-auto [&_button]:shrink-0 [&_button]:whitespace-nowrap">
                           <Button
                             size="sm"
                             variant={status === 'present' ? 'default' : 'outline'}
