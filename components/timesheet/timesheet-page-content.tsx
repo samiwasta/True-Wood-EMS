@@ -56,6 +56,14 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useDebounce } from '@/lib/hooks/useDebounce'
+import { TimeInput } from '@/components/ui/time-input'
+import {
+  parseTimeToMinutes,
+  formatMinutesToDuration,
+  toHHmm,
+  formatTime12h,
+  formatTime12hOrDash,
+} from '@/lib/utils/time.utils'
 
 // ─── Constants ───────────────────────────────────────────────────────
 
@@ -70,36 +78,6 @@ const getCategoryOrder = (categoryName?: string): number => {
 }
 
 // ─── Time helpers ────────────────────────────────────────────────────
-
-function parseTimeToMinutes(t: string | null | undefined): number | null {
-  if (!t || typeof t !== 'string') return null
-  const trimmed = t.trim()
-  if (!trimmed) return null
-  const parts = trimmed.split(':')
-  if (parts.length < 2) return null
-  const h = parseInt(parts[0], 10)
-  const m = parseInt(parts[1], 10)
-  if (Number.isNaN(h) || Number.isNaN(m)) return null
-  return h * 60 + m
-}
-
-function formatMinutesToTime(totalMinutes: number): string {
-  const h = Math.floor(totalMinutes / 60)
-  const m = totalMinutes % 60
-  return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`
-}
-
-function toHHmm(t: string | null | undefined): string {
-  if (!t || typeof t !== 'string') return ''
-  const trimmed = t.trim()
-  if (!trimmed) return ''
-  const parts = trimmed.split(':')
-  if (parts.length < 2) return ''
-  const h = parseInt(parts[0], 10)
-  const m = parseInt(parts[1], 10)
-  if (Number.isNaN(h) || Number.isNaN(m)) return ''
-  return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`
-}
 
 function calculateWorkingHours(
   timeIn: string | null | undefined,
@@ -665,26 +643,26 @@ export function TimesheetPageContent() {
       const totalMins = (record.status === 'present' && inMins != null && outMins != null && outMins > inMins)
         ? outMins - inMins
         : null
-      const totalHoursStr = totalMins != null ? formatMinutesToTime(totalMins) : '-'
+      const totalHoursStr = totalMins != null ? formatMinutesToDuration(totalMins) : '-'
 
       // Actual Hours = Total Hours - Break Hours
       const breakMins = breakHrs * 60
       const actualMins = totalMins != null ? Math.max(0, totalMins - breakMins) : null
-      const actualHoursStr = actualMins != null ? formatMinutesToTime(actualMins) : '-'
+      const actualHoursStr = actualMins != null ? formatMinutesToDuration(actualMins) : '-'
 
       // Overtime (regular days only, not Sundays)
       const overtimeMins =
         record.status === 'present' && !isSunday
           ? calculateOvertimeMinutes(timeIn, timeOut, expStart, expEnd, breakHrs, breakHrs, dateStr)
           : null
-      const overtimeStr = (overtimeMins != null && overtimeMins > 0) ? formatMinutesToTime(overtimeMins) : '-'
+      const overtimeStr = (overtimeMins != null && overtimeMins > 0) ? formatMinutesToDuration(overtimeMins) : '-'
 
       // Holiday Overtime (work done on Sundays)
       const holidayOvertimeMins =
         record.status === 'present' && isSunday && actualMins != null
           ? actualMins
           : null
-      const holidayOvertimeStr = (holidayOvertimeMins != null && holidayOvertimeMins > 0) ? formatMinutesToTime(holidayOvertimeMins) : '-'
+      const holidayOvertimeStr = (holidayOvertimeMins != null && holidayOvertimeMins > 0) ? formatMinutesToDuration(holidayOvertimeMins) : '-'
 
       const breakDisplay = breakHrs > 0 ? (breakHrs % 1 === 0 ? String(breakHrs) : String(breakHrs)) : '-'
 
@@ -694,8 +672,8 @@ export function TimesheetPageContent() {
         dayName,
         workSite: workSiteName,
         dayInfo,
-        timeIn: record.status === 'absent' ? '-' : (timeIn ? toHHmm(timeIn) : '-'),
-        timeOut: record.status === 'absent' ? '-' : (timeOut ? toHHmm(timeOut) : '-'),
+        timeIn: record.status === 'absent' ? '-' : formatTime12hOrDash(timeIn),
+        timeOut: record.status === 'absent' ? '-' : formatTime12hOrDash(timeOut),
         totalHours: totalHoursStr,
         breakHours: breakDisplay,
         actualHours: actualHoursStr,
@@ -760,8 +738,8 @@ export function TimesheetPageContent() {
 
     tableData.push([
       '', '', '', '', '', '', '', '', 'Total',
-      totalOT > 0 ? formatMinutesToTime(totalOT) : '-',
-      totalHOT > 0 ? formatMinutesToTime(totalHOT) : '-',
+      totalOT > 0 ? formatMinutesToDuration(totalOT) : '-',
+      totalHOT > 0 ? formatMinutesToDuration(totalHOT) : '-',
     ])
 
     autoTable(doc, {
@@ -1015,7 +993,7 @@ export function TimesheetPageContent() {
                       const breakHrs = getBreakHours(employee, record)
                       
                       const workingMins = isPresent ? calculateWorkingHours(timeIn, timeOut, breakHrs, selectedDate) : null
-                      const workingHoursStr = workingMins != null ? formatMinutesToTime(workingMins) : '-'
+                      const workingHoursStr = workingMins != null ? formatMinutesToDuration(workingMins) : '-'
                       
                       const overtimeMins = isPresent
                         ? calculateOvertimeMinutes(
@@ -1028,7 +1006,7 @@ export function TimesheetPageContent() {
                             selectedDate
                           )
                         : null
-                      const overtimeStr = overtimeMins != null ? formatMinutesToTime(overtimeMins) : '0'
+                      const overtimeStr = overtimeMins != null ? formatMinutesToDuration(overtimeMins) : '0'
 
                       const breakDisplay =
                         isPresent && breakHrs > 0 ? (breakHrs % 1 === 0 ? String(breakHrs) : String(breakHrs)) : '-'
@@ -1049,11 +1027,11 @@ export function TimesheetPageContent() {
                           </TableCell>
                           {/* Time In */}
                           <TableCell className="text-gray-700">
-                            {isPresent && timeIn ? toHHmm(timeIn) : <span className="text-gray-400">-</span>}
+                            {isPresent && timeIn ? formatTime12h(timeIn) : <span className="text-gray-400">-</span>}
                           </TableCell>
                           {/* Time Out */}
                           <TableCell className="text-gray-700">
-                            {isPresent && timeOut ? toHHmm(timeOut) : <span className="text-gray-400">-</span>}
+                            {isPresent && timeOut ? formatTime12h(timeOut) : <span className="text-gray-400">-</span>}
                           </TableCell>
                           {/* Break hours */}
                           <TableCell className="text-gray-700">{breakDisplay}</TableCell>
@@ -1144,22 +1122,18 @@ export function TimesheetPageContent() {
             {/* Time In */}
             <div className="space-y-2">
               <label className="text-sm font-medium text-gray-700">Time In</label>
-              <Input
-                type="time"
+              <TimeInput
                 value={editTimeIn}
-                onChange={(e) => setEditTimeIn(e.target.value)}
-                className="h-10"
+                onChange={setEditTimeIn}
               />
             </div>
 
             {/* Time Out */}
             <div className="space-y-2">
               <label className="text-sm font-medium text-gray-700">Time Out</label>
-              <Input
-                type="time"
+              <TimeInput
                 value={editTimeOut}
-                onChange={(e) => setEditTimeOut(e.target.value)}
-                className="h-10"
+                onChange={setEditTimeOut}
               />
             </div>
 
@@ -1294,8 +1268,8 @@ export function TimesheetPageContent() {
               }
               const totalOvertimeMins = viewRows.reduce((acc, row) => acc + parseHHmmToMins(row.overtime), 0)
               const totalHolidayOTMins = viewRows.reduce((acc, row) => acc + parseHHmmToMins(row.holidayOvertime), 0)
-              const totalOvertimeStr = totalOvertimeMins > 0 ? formatMinutesToTime(totalOvertimeMins) : '-'
-              const totalHolidayOTStr = totalHolidayOTMins > 0 ? formatMinutesToTime(totalHolidayOTMins) : '-'
+              const totalOvertimeStr = totalOvertimeMins > 0 ? formatMinutesToDuration(totalOvertimeMins) : '-'
+              const totalHolidayOTStr = totalHolidayOTMins > 0 ? formatMinutesToDuration(totalHolidayOTMins) : '-'
               return (
                 <Table>
                   <TableHeader>

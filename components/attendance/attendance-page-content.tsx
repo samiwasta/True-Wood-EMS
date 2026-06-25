@@ -26,11 +26,13 @@ import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Save, RotateCcw, C
 import { Calendar } from '@/components/ui/calendar'
 import { format, addDays } from 'date-fns'
 import { useDebounce } from '@/lib/hooks/useDebounce'
+import { TimeInput } from '@/components/ui/time-input'
+import { isFieldStaffCategory } from '@/lib/utils/category.utils'
+import { toHHmm } from '@/lib/utils/time.utils'
 
 const predefinedCategoryOrder = ['Worker Staff', 'Dubai Staff', 'Daily Basis Staff', 'Office Staff']
 
 const WAREHOUSE_KEY = '__warehouse__'
-const WORKER_STAFF_CATEGORY = 'worker staff'
 
 const getCategoryOrder = (categoryName?: string): number => {
   if (!categoryName) return 999
@@ -110,10 +112,9 @@ export function AttendancePageContent() {
   const activeWorkSites = workSites.filter(site => site.status === 'active')
   const completedWorkSites = workSites.filter(site => site.status === 'completed')
 
-  const isWorkerStaffEmployee = (employeeId: string): boolean => {
+  const isFieldStaffEmployee = (employeeId: string): boolean => {
     const employee = employees.find((e) => e.id === employeeId)
-    const categoryName = employee?.category?.name || ''
-    return categoryName.toLowerCase() === WORKER_STAFF_CATEGORY
+    return isFieldStaffCategory(employee?.category?.name)
   }
 
   const fetchAttendance = async (date: Date) => {
@@ -250,12 +251,12 @@ export function AttendancePageContent() {
           r.status === 'present' &&
           !r.work_site_id &&
           !!r.employee_id &&
-          isWorkerStaffEmployee(r.employee_id)
+          isFieldStaffEmployee(r.employee_id)
       ) as { time_in?: string | null; time_out?: string | null; break_hours?: number | null } | undefined
 
       initial[WAREHOUSE_KEY] = {
-        timeIn: warehouseRecord?.time_in || '',
-        timeOut: warehouseRecord?.time_out || '',
+        timeIn: toHHmm(warehouseRecord?.time_in || ''),
+        timeOut: toHHmm(warehouseRecord?.time_out || ''),
         breakHours:
           warehouseRecord?.break_hours != null ? String(warehouseRecord.break_hours) : '1',
       }
@@ -268,8 +269,8 @@ export function AttendancePageContent() {
         ) as { time_in?: string | null; time_out?: string | null; break_hours?: number | null } | undefined
 
         initial[site.id] = {
-          timeIn: t?.time_in || projectRecord?.time_in || '',
-          timeOut: t?.time_out || projectRecord?.time_out || '',
+          timeIn: toHHmm(t?.time_in || projectRecord?.time_in || ''),
+          timeOut: toHHmm(t?.time_out || projectRecord?.time_out || ''),
           breakHours:
             t?.break_hours != null
               ? String(t.break_hours)
@@ -329,7 +330,7 @@ export function AttendancePageContent() {
           )
         }
 
-        if (record.status === 'present' && !workSiteId && isWorkerStaffEmployee(employeeId)) {
+        if (record.status === 'present' && !workSiteId && isFieldStaffEmployee(employeeId)) {
           const entry = times[WAREHOUSE_KEY]
           const breakHrs = entry?.breakHours.trim() ? parseFloat(entry.breakHours) : 1
           return AttendanceService.saveAttendance(
@@ -655,15 +656,15 @@ export function AttendancePageContent() {
       </div>
 
       <Dialog open={timesDialogOpen} onOpenChange={setTimesDialogOpen}>
-        <DialogContent className="sm:max-w-[720px] max-h-[85vh] flex flex-col">
+        <DialogContent className="sm:max-w-[860px] max-h-[85vh] flex flex-col">
           <DialogHeader>
             <DialogTitle className="text-xl font-semibold text-gray-900">
               Set Project & Warehouse Times
             </DialogTitle>
             <DialogDescription className="text-gray-500">
-              Set Time In, Time Out, and Break Hours for Worker Staff at the warehouse and each active
-              project on {format(selectedDate, 'PPP')}. These times will be applied when saving
-              attendance.
+              Set Time In, Time Out, and Break Hours for Worker Staff and Daily Basis Staff at the
+              warehouse and each active project on {format(selectedDate, 'PPP')}. These times will be
+              applied when saving attendance.
             </DialogDescription>
           </DialogHeader>
           <div className="flex-1 overflow-y-auto py-2">
@@ -678,8 +679,8 @@ export function AttendancePageContent() {
                   <thead className="bg-[#23887C]">
                     <tr>
                       <th className="text-left font-semibold text-white px-4 py-3">Project</th>
-                      <th className="text-left font-semibold text-white px-4 py-3 w-32">Time In</th>
-                      <th className="text-left font-semibold text-white px-4 py-3 w-32">Time Out</th>
+                      <th className="text-left font-semibold text-white px-4 py-3 w-56">Time In</th>
+                      <th className="text-left font-semibold text-white px-4 py-3 w-56">Time Out</th>
                       <th className="text-left font-semibold text-white px-4 py-3 w-28">Break (hrs)</th>
                     </tr>
                   </thead>
@@ -699,25 +700,23 @@ export function AttendancePageContent() {
                               </div>
                               <div>
                                 <div className="font-medium text-gray-900">Warehouse</div>
-                                <div className="text-xs text-gray-500">Worker Staff without a project</div>
+                                <div className="text-xs text-gray-500">Worker Staff and Daily Basis Staff without a project</div>
                               </div>
                             </div>
                           </td>
                           <td className="px-4 py-2">
-                            <Input
-                              type="time"
+                            <TimeInput
                               value={warehouseEntry.timeIn}
-                              onChange={(e) => updateProjectTime(WAREHOUSE_KEY, 'timeIn', e.target.value)}
-                              className="h-9 border-gray-300"
+                              onChange={(value) => updateProjectTime(WAREHOUSE_KEY, 'timeIn', value)}
+                              compact
                               disabled={saving}
                             />
                           </td>
                           <td className="px-4 py-2">
-                            <Input
-                              type="time"
+                            <TimeInput
                               value={warehouseEntry.timeOut}
-                              onChange={(e) => updateProjectTime(WAREHOUSE_KEY, 'timeOut', e.target.value)}
-                              className="h-9 border-gray-300"
+                              onChange={(value) => updateProjectTime(WAREHOUSE_KEY, 'timeOut', value)}
+                              compact
                               disabled={saving}
                             />
                           </td>
@@ -744,20 +743,18 @@ export function AttendancePageContent() {
                             <div className="text-xs text-gray-500">{site.location}</div>
                           </td>
                           <td className="px-4 py-2">
-                            <Input
-                              type="time"
+                            <TimeInput
                               value={entry.timeIn}
-                              onChange={(e) => updateProjectTime(site.id, 'timeIn', e.target.value)}
-                              className="h-9 border-gray-300"
+                              onChange={(value) => updateProjectTime(site.id, 'timeIn', value)}
+                              compact
                               disabled={saving}
                             />
                           </td>
                           <td className="px-4 py-2">
-                            <Input
-                              type="time"
+                            <TimeInput
                               value={entry.timeOut}
-                              onChange={(e) => updateProjectTime(site.id, 'timeOut', e.target.value)}
-                              className="h-9 border-gray-300"
+                              onChange={(value) => updateProjectTime(site.id, 'timeOut', value)}
+                              compact
                               disabled={saving}
                             />
                           </td>

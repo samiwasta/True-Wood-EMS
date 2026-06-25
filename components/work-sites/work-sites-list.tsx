@@ -19,6 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Calendar } from '@/components/ui/calendar'
 import { format } from 'date-fns'
 import { WorkSiteService } from '@/lib/services/work-site.service'
+import { formatTime12hOrDash } from '@/lib/utils/time.utils'
 
 const getInitials = (name: string, shortHand?: string): string => {
   if (shortHand && shortHand.trim()) {
@@ -801,7 +802,7 @@ export function WorkSitesList() {
                     {historyWorkSite && timeHistory.length === 0 ? (
                       <tr>
                         <td colSpan={4} className="px-4 py-6 text-center text-gray-500">
-                          No history yet. Current: {historyWorkSite.time_in || '—'} / {historyWorkSite.time_out || '—'}
+                          No history yet. Current: {formatTime12hOrDash(historyWorkSite.time_in)} / {formatTime12hOrDash(historyWorkSite.time_out)}
                           {historyWorkSite.break_hours != null ? `, ${historyWorkSite.break_hours}h break` : ''}
                         </td>
                       </tr>
@@ -809,8 +810,8 @@ export function WorkSitesList() {
                       timeHistory.map((row, i) => (
                         <tr key={i} className="hover:bg-gray-50/50">
                           <td className="px-4 py-2.5 font-medium text-gray-900">{formatDate(row.effective_from)}</td>
-                          <td className="px-4 py-2.5 text-gray-700">{row.time_in || '—'}</td>
-                          <td className="px-4 py-2.5 text-gray-700">{row.time_out || '—'}</td>
+                          <td className="px-4 py-2.5 text-gray-700">{formatTime12hOrDash(row.time_in)}</td>
+                          <td className="px-4 py-2.5 text-gray-700">{formatTime12hOrDash(row.time_out)}</td>
                           <td className="px-4 py-2.5 text-gray-700">{row.break_hours != null ? `${row.break_hours}` : '—'}</td>
                         </tr>
                       ))

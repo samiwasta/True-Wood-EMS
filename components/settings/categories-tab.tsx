@@ -17,6 +17,8 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
+import { TimeInput } from '@/components/ui/time-input'
+import { toHHmm } from '@/lib/utils/time.utils'
 
 export function CategoriesTab() {
   const { categories, loading, createCategory, updateCategory, deleteCategory } = useCategories()
@@ -145,8 +147,8 @@ export function CategoriesTab() {
     setEditingCategory(category)
     setCategoryName(category.name || category.title || '')
     setCategoryDescription(category.description || '')
-    setTimeIn(category.time_in || '')
-    setTimeOut(category.time_out || '')
+    setTimeIn(toHHmm(category.time_in || ''))
+    setTimeOut(toHHmm(category.time_out || ''))
     setBreakHours(category.break_hours != null ? String(category.break_hours) : '')
     setIsEditDialogOpen(true)
   }
@@ -243,12 +245,9 @@ export function CategoriesTab() {
                     >
                       Time In
                     </label>
-                    <Input
-                      id="time-in"
-                      type="time"
+                    <TimeInput
                       value={timeIn}
-                      onChange={(e) => setTimeIn(e.target.value)}
-                      className="h-11 border-gray-300 focus:border-[#23887C] focus:ring-[#23887C] focus:ring-1 transition-all duration-200"
+                      onChange={setTimeIn}
                       disabled={isSubmitting}
                     />
                   </div>
@@ -259,12 +258,9 @@ export function CategoriesTab() {
                     >
                       Time Out
                     </label>
-                    <Input
-                      id="time-out"
-                      type="time"
+                    <TimeInput
                       value={timeOut}
-                      onChange={(e) => setTimeOut(e.target.value)}
-                      className="h-11 border-gray-300 focus:border-[#23887C] focus:ring-[#23887C] focus:ring-1 transition-all duration-200"
+                      onChange={setTimeOut}
                       disabled={isSubmitting}
                     />
                   </div>
@@ -429,12 +425,9 @@ export function CategoriesTab() {
                 >
                   Time In
                 </label>
-                <Input
-                  id="edit-time-in"
-                  type="time"
+                <TimeInput
                   value={timeIn}
-                  onChange={(e) => setTimeIn(e.target.value)}
-                  className="h-11 border-gray-300 focus:border-[#23887C] focus:ring-[#23887C] focus:ring-1 transition-all duration-200"
+                  onChange={setTimeIn}
                   disabled={isSubmitting}
                 />
               </div>
@@ -445,12 +438,9 @@ export function CategoriesTab() {
                 >
                   Time Out
                 </label>
-                <Input
-                  id="edit-time-out"
-                  type="time"
+                <TimeInput
                   value={timeOut}
-                  onChange={(e) => setTimeOut(e.target.value)}
-                  className="h-11 border-gray-300 focus:border-[#23887C] focus:ring-[#23887C] focus:ring-1 transition-all duration-200"
+                  onChange={setTimeOut}
                   disabled={isSubmitting}
                 />
               </div>
