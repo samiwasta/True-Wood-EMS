@@ -408,24 +408,26 @@ export function TimesheetPageContent() {
     return cat?.time_out ?? ''
   }
 
-  /** Get expected time_in: from saved record, work site on date, or category */
+  /** Get scheduled time_in for overtime: work site on date, current work site, or category (not actual record times). */
   const getExpectedStartTime = (employee: Employee, record: TimesheetRecord | undefined) => {
-    if (record?.time_in) return record.time_in
     if (record?.work_site_id) {
       const times = workSiteTimesOnDate[record.work_site_id]
       if (times?.time_in) return times.time_in
+      const ws = workSiteMap[record.work_site_id]
+      if (ws?.time_in) return ws.time_in
     }
     const catId = employee.category_id || employee.category?.id
     const cat = catId ? categoryMap[catId] : null
     return cat?.time_in ?? null
   }
 
-  /** Get expected time_out: from saved record, work site on date, or category */
+  /** Get scheduled time_out for overtime: work site on date, current work site, or category (not actual record times). */
   const getExpectedEndTime = (employee: Employee, record: TimesheetRecord | undefined) => {
-    if (record?.time_out) return record.time_out
     if (record?.work_site_id) {
       const times = workSiteTimesOnDate[record.work_site_id]
       if (times?.time_out) return times.time_out
+      const ws = workSiteMap[record.work_site_id]
+      if (ws?.time_out) return ws.time_out
     }
     const catId = employee.category_id || employee.category?.id
     const cat = catId ? categoryMap[catId] : null
@@ -459,16 +461,19 @@ export function TimesheetPageContent() {
     return cat?.break_hours ?? 0
   }
 
-  /** Expected start/end for a record on a specific date (monthly view). */
+  /** Scheduled start for overtime on a specific date (monthly view; not actual record times). */
   const getExpectedStartForDate = (
     employee: Employee,
     record: TimesheetRecord,
     dateStr: string
   ): string | null => {
-    if (record.time_in) return record.time_in
     const byDate = workSiteTimesByDate[dateStr]
-    if (record.work_site_id && byDate?.[record.work_site_id]?.time_in != null)
-      return byDate[record.work_site_id].time_in
+    if (record.work_site_id) {
+      if (byDate?.[record.work_site_id]?.time_in != null)
+        return byDate[record.work_site_id].time_in
+      const ws = workSiteMap[record.work_site_id]
+      if (ws?.time_in) return ws.time_in
+    }
     const catId = employee.category_id || employee.category?.id
     const cat = catId ? categoryMap[catId] : null
     return cat?.time_in ?? null
@@ -479,10 +484,13 @@ export function TimesheetPageContent() {
     record: TimesheetRecord,
     dateStr: string
   ): string | null => {
-    if (record.time_out) return record.time_out
     const byDate = workSiteTimesByDate[dateStr]
-    if (record.work_site_id && byDate?.[record.work_site_id]?.time_out != null)
-      return byDate[record.work_site_id].time_out
+    if (record.work_site_id) {
+      if (byDate?.[record.work_site_id]?.time_out != null)
+        return byDate[record.work_site_id].time_out
+      const ws = workSiteMap[record.work_site_id]
+      if (ws?.time_out) return ws.time_out
+    }
     const catId = employee.category_id || employee.category?.id
     const cat = catId ? categoryMap[catId] : null
     return cat?.time_out ?? null

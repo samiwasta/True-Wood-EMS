@@ -324,6 +324,21 @@ export class WorkSiteService {
         }
       }
 
+      const { data: workSite, error: workSiteError } = await supabase
+        .from('work_sites')
+        .select('time_in, time_out, break_hours')
+        .eq('id', workSiteId)
+        .maybeSingle()
+
+      if (!workSiteError && workSite) {
+        const bh = workSite.break_hours != null ? Number(workSite.break_hours) : null
+        return {
+          time_in: workSite.time_in ?? null,
+          time_out: workSite.time_out ?? null,
+          break_hours: bh != null && !Number.isNaN(bh) ? bh : null,
+        }
+      }
+
       return { time_in: null, time_out: null, break_hours: null }
     } catch (error) {
       console.error('Error fetching work site times for date:', error)
@@ -357,6 +372,24 @@ export class WorkSiteService {
             bySite[id] = {
               time_in: row.time_in ?? null,
               time_out: row.time_out ?? null,
+              break_hours: bh != null && !Number.isNaN(bh) ? bh : null,
+            }
+          }
+        }
+      }
+
+      const { data: workSites, error: workSitesError } = await supabase
+        .from('work_sites')
+        .select('id, time_in, time_out, break_hours')
+
+      if (!workSitesError && workSites) {
+        for (const ws of workSites) {
+          const id = ws.id as string
+          if (id && !bySite[id]) {
+            const bh = ws.break_hours != null ? Number(ws.break_hours) : null
+            bySite[id] = {
+              time_in: ws.time_in ?? null,
+              time_out: ws.time_out ?? null,
               break_hours: bh != null && !Number.isNaN(bh) ? bh : null,
             }
           }
