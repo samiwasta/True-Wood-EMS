@@ -872,7 +872,7 @@ export function AttendancePageContent() {
             <thead className="bg-[#23887C]">
               <tr>
                 <th className="px-6 py-4 text-left text-sm font-semibold text-white w-1/4">Employee ID</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-white w-1/4">Name</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold text-white min-w-[280px]">Name</th>
                 <th className="px-6 py-4 text-center text-sm font-semibold text-white min-w-[42rem]">Status</th>
               </tr>
             </thead>
@@ -907,15 +907,15 @@ export function AttendancePageContent() {
                       <td className="px-6 py-4 text-sm font-medium text-gray-900">
                         {employee.employee_id || '-'}
                       </td>
-                      <td className="px-6 py-4 text-sm text-gray-900">
+                      <td className="px-6 py-4 text-sm text-gray-900 min-w-[280px]">
                         <div className="flex flex-col gap-1.5">
-                          <span className="font-medium">{employee.name}</span>
                           {yesterdayChip && (
                             <YesterdayLocationChip
                               label={yesterdayChip.label}
                               className={yesterdayChip.className}
                             />
                           )}
+                          <span className="font-medium">{employee.name}</span>
                         </div>
                       </td>
                       <td className="px-6 py-4 min-w-[42rem]">
