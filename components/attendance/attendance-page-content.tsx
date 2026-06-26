@@ -4,8 +4,8 @@ import React, { useState, useEffect, useMemo } from 'react'
 import { useEmployees, Employee } from '@/lib/hooks/useEmployees'
 import { useLeaveTypes } from '@/lib/hooks/useLeaveTypes'
 import { useWorkSites } from '@/lib/hooks/useWorkSites'
+import { useCategories } from '@/lib/hooks/useCategories'
 import { AttendanceService } from '@/lib/services/attendance.service'
-import { WorkSiteService } from '@/lib/services/work-site.service'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -27,8 +27,16 @@ import { Calendar } from '@/components/ui/calendar'
 import { format, addDays } from 'date-fns'
 import { useDebounce } from '@/lib/hooks/useDebounce'
 import { TimeInput } from '@/components/ui/time-input'
+import { YesterdayLocationChip } from '@/components/attendance/yesterday-location-chip'
 import { isFieldStaffCategory } from '@/lib/utils/category.utils'
 import { toHHmm } from '@/lib/utils/time.utils'
+import {
+  getWorkSiteInitials,
+  getColorForWorkSiteInitials,
+  WAREHOUSE_CHIP_CLASSES,
+  OFFICE_CHIP_CLASSES,
+} from '@/lib/utils/work-site.utils'
+import type { WorkSite } from '@/lib/hooks/useWorkSites'
 
 const predefinedCategoryOrder = ['Worker Staff', 'Dubai Staff', 'Daily Basis Staff', 'Office Staff']
 
@@ -64,21 +72,6 @@ const generateLeaveShortHand = (name: string): string => {
   return name.substring(0, 2).toUpperCase()
 }
 
-const getColorForInitials = (initials: string): { bg: string; text: string } => {
-  const colors = [
-    { bg: 'bg-blue-500', text: 'text-white' },
-    { bg: 'bg-green-500', text: 'text-white' },
-    { bg: 'bg-purple-500', text: 'text-white' },
-    { bg: 'bg-orange-500', text: 'text-white' },
-    { bg: 'bg-pink-500', text: 'text-white' },
-    { bg: 'bg-indigo-500', text: 'text-white' },
-    { bg: 'bg-teal-500', text: 'text-white' },
-    { bg: 'bg-red-500', text: 'text-white' },
-  ]
-  const index = initials.charCodeAt(0) % colors.length
-  return colors[index]
-}
-
 interface ProjectTimeEntry {
   timeIn: string
   timeOut: string
@@ -89,9 +82,11 @@ export function AttendancePageContent() {
   const { employees, loading: employeesLoading } = useEmployees()
   const { leaveTypes, loading: leaveTypesLoading } = useLeaveTypes()
   const { workSites, loading: workSitesLoading } = useWorkSites()
+  const { categories } = useCategories()
 
   const [selectedDate, setSelectedDate] = useState<Date>(new Date())
   const [attendanceRecords, setAttendanceRecords] = useState<Record<string, AttendanceRecord>>({})
+  const [yesterdayRecords, setYesterdayRecords] = useState<Record<string, AttendanceRecord>>({})
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [resetting, setResetting] = useState(false)
@@ -112,20 +107,85 @@ export function AttendancePageContent() {
   const activeWorkSites = workSites.filter(site => site.status === 'active')
   const completedWorkSites = workSites.filter(site => site.status === 'completed')
 
+  const workSiteById = useMemo(() => {
+    const m: Record<string, WorkSite> = {}
+    workSites.forEach((site) => {
+      m[site.id] = site
+    })
+    return m
+  }, [workSites])
+
+  const categoryMap = useMemo(() => {
+    const m: Record<string, { time_in?: string; time_out?: string; break_hours?: number | null }> = {}
+    categories.forEach((c) => {
+      if (c.id) {
+        m[c.id] = {
+          time_in: c.time_in,
+          time_out: c.time_out,
+          break_hours: c.break_hours ?? null,
+        }
+      }
+    })
+    return m
+  }, [categories])
+
+  const getCategoryScheduledTimes = (employeeId: string) => {
+    const employee = employees.find((e) => e.id === employeeId)
+    const catId = employee?.category_id || employee?.category?.id
+    const cat = catId ? categoryMap[catId] : null
+    return {
+      timeIn: cat?.time_in || '',
+      timeOut: cat?.time_out || '',
+      breakHours: cat?.break_hours ?? 1,
+    }
+  }
+
   const isFieldStaffEmployee = (employeeId: string): boolean => {
     const employee = employees.find((e) => e.id === employeeId)
     return isFieldStaffCategory(employee?.category?.name)
+  }
+
+  const getYesterdayLocationChip = (employee: Employee) => {
+    const record = yesterdayRecords[employee.id]
+    if (!record || record.status !== 'present') return null
+
+    if (record.work_site_id) {
+      const workSite = workSiteById[record.work_site_id]
+      if (workSite) {
+        const initials = getWorkSiteInitials(workSite.name, workSite.short_hand)
+        const colors = getColorForWorkSiteInitials(initials)
+        return {
+          label: workSite.short_hand?.trim() || workSite.name,
+          className: `${colors.bg} ${colors.text}`,
+        }
+      }
+      return {
+        label: 'Project Site',
+        className: `${getColorForWorkSiteInitials('PS').bg} ${getColorForWorkSiteInitials('PS').text}`,
+      }
+    }
+
+    if (isFieldStaffCategory(employee.category?.name)) {
+      return { label: 'Warehouse', className: WAREHOUSE_CHIP_CLASSES }
+    }
+
+    return { label: 'Office', className: OFFICE_CHIP_CLASSES }
   }
 
   const fetchAttendance = async (date: Date) => {
     setLoading(true)
     try {
       const dateStr = format(date, 'yyyy-MM-dd')
-      const records = await AttendanceService.getAttendanceByDate(dateStr)
+      const yesterdayStr = format(addDays(date, -1), 'yyyy-MM-dd')
+      const [records, yesterdayData] = await Promise.all([
+        AttendanceService.getAttendanceByDate(dateStr),
+        AttendanceService.getAttendanceByDate(yesterdayStr),
+      ])
       
       const recordsMap: Record<string, AttendanceRecord> = {}
       const leaveTypeMap: Record<string, string> = {}
       const workSiteMap: Record<string, string> = {}
+      const yesterdayMap: Record<string, AttendanceRecord> = {}
 
       records.forEach((record: {
         id: string
@@ -154,7 +214,26 @@ export function AttendancePageContent() {
         }
       })
 
+      yesterdayData.forEach((record: {
+        id: string
+        employee_id: string
+        date: string
+        status: 'present' | 'absent' | 'leave'
+        work_site_id?: string | null
+      }) => {
+        if (record.employee_id) {
+          yesterdayMap[record.employee_id] = {
+            id: record.id,
+            employee_id: record.employee_id,
+            date: record.date,
+            status: record.status,
+            work_site_id: record.work_site_id,
+          }
+        }
+      })
+
       setAttendanceRecords(recordsMap)
+      setYesterdayRecords(yesterdayMap)
       setSelectedLeaveType(leaveTypeMap)
       setSelectedWorkSite(workSiteMap)
     } catch (error) {
@@ -239,10 +318,7 @@ export function AttendancePageContent() {
     setTimesDialogOpen(true)
     try {
       const dateStr = format(selectedDate, 'yyyy-MM-dd')
-      const [timesOnDate, attendanceForDate] = await Promise.all([
-        WorkSiteService.getWorkSiteTimesForAllSitesOnDate(dateStr),
-        AttendanceService.getAttendanceByDate(dateStr),
-      ])
+      const attendanceForDate = await AttendanceService.getAttendanceByDate(dateStr)
 
       const initial: Record<string, ProjectTimeEntry> = {}
 
@@ -252,30 +328,35 @@ export function AttendancePageContent() {
           !r.work_site_id &&
           !!r.employee_id &&
           isFieldStaffEmployee(r.employee_id)
-      ) as { time_in?: string | null; time_out?: string | null; break_hours?: number | null } | undefined
+      ) as { time_in?: string | null; time_out?: string | null; break_hours?: number | null; employee_id?: string } | undefined
+
+      const warehouseScheduled = warehouseRecord?.employee_id
+        ? getCategoryScheduledTimes(warehouseRecord.employee_id)
+        : { timeIn: '', timeOut: '', breakHours: 1 }
 
       initial[WAREHOUSE_KEY] = {
-        timeIn: toHHmm(warehouseRecord?.time_in || ''),
-        timeOut: toHHmm(warehouseRecord?.time_out || ''),
+        timeIn: toHHmm(warehouseRecord?.time_in || warehouseScheduled.timeIn),
+        timeOut: toHHmm(warehouseRecord?.time_out || warehouseScheduled.timeOut),
         breakHours:
-          warehouseRecord?.break_hours != null ? String(warehouseRecord.break_hours) : '1',
+          warehouseRecord?.break_hours != null
+            ? String(warehouseRecord.break_hours)
+            : String(warehouseScheduled.breakHours),
       }
 
       activeWorkSites.forEach((site) => {
-        const t = timesOnDate[site.id]
         const projectRecord = attendanceForDate.find(
           (r: { status: string; work_site_id?: string | null; time_in?: string | null }) =>
             r.status === 'present' && r.work_site_id === site.id && r.time_in
         ) as { time_in?: string | null; time_out?: string | null; break_hours?: number | null } | undefined
 
         initial[site.id] = {
-          timeIn: toHHmm(t?.time_in || projectRecord?.time_in || ''),
-          timeOut: toHHmm(t?.time_out || projectRecord?.time_out || ''),
+          timeIn: toHHmm(projectRecord?.time_in || site.time_in || ''),
+          timeOut: toHHmm(projectRecord?.time_out || site.time_out || ''),
           breakHours:
-            t?.break_hours != null
-              ? String(t.break_hours)
-              : projectRecord?.break_hours != null
-                ? String(projectRecord.break_hours)
+            projectRecord?.break_hours != null
+              ? String(projectRecord.break_hours)
+              : site.break_hours != null
+                ? String(site.break_hours)
                 : '1',
         }
       })
@@ -294,21 +375,6 @@ export function AttendancePageContent() {
     try {
       const dateStr = format(selectedDate, 'yyyy-MM-dd')
       const activeWorkSiteIds = new Set(activeWorkSites.map((s) => s.id))
-
-      await Promise.all(
-        activeWorkSites.map((site) => {
-          const entry = times[site.id]
-          if (!entry) return Promise.resolve()
-          const breakHrs = entry.breakHours.trim() ? parseFloat(entry.breakHours) : 1
-          return WorkSiteService.updateWorkSiteTimesForDate(
-            site.id,
-            dateStr,
-            entry.timeIn.trim() || null,
-            entry.timeOut.trim() || null,
-            Number.isNaN(breakHrs) ? 1 : breakHrs
-          )
-        })
-      )
 
       const promises = Object.keys(attendanceRecords).map((employeeId) => {
         const record = attendanceRecords[employeeId]
@@ -659,12 +725,12 @@ export function AttendancePageContent() {
         <DialogContent className="sm:max-w-[860px] max-h-[85vh] flex flex-col">
           <DialogHeader>
             <DialogTitle className="text-xl font-semibold text-gray-900">
-              Set Project & Warehouse Times
+              Enter Actual Work Times
             </DialogTitle>
             <DialogDescription className="text-gray-500">
-              Set Time In, Time Out, and Break Hours for Worker Staff and Daily Basis Staff at the
-              warehouse and each active project on {format(selectedDate, 'PPP')}. These times will be
-              applied when saving attendance.
+              Enter the actual Time In, Time Out, and Break Hours worked on {format(selectedDate, 'PPP')}.
+              Scheduled hours come from Work Sites and Settings; overtime is calculated from the
+              difference between actual and scheduled times.
             </DialogDescription>
           </DialogHeader>
           <div className="flex-1 overflow-y-auto py-2">
@@ -829,6 +895,7 @@ export function AttendancePageContent() {
                   const status = getEmployeeStatus(employee.id)
                   const leaveTypeName = getLeaveTypeName(employee.id)
                   const workSiteShortHand = getWorkSiteShortHand(employee.id)
+                  const yesterdayChip = getYesterdayLocationChip(employee)
 
                       return (
                         <tr 
@@ -841,7 +908,15 @@ export function AttendancePageContent() {
                         {employee.employee_id || '-'}
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-900">
-                        {employee.name}
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {yesterdayChip && (
+                            <YesterdayLocationChip
+                              label={yesterdayChip.label}
+                              className={yesterdayChip.className}
+                            />
+                          )}
+                          <span className="font-medium">{employee.name}</span>
+                        </div>
                       </td>
                       <td className="px-6 py-4 min-w-[42rem]">
                         <div className="flex items-center justify-end gap-1.5 flex-nowrap w-max ml-auto [&_button]:shrink-0 [&_button]:whitespace-nowrap">
@@ -924,7 +999,7 @@ export function AttendancePageContent() {
                                     ) : (
                                       leaveTypes.map((leaveType) => {
                                         const shorthand = generateLeaveShortHand(leaveType.name || '')
-                                        const colorClasses = getColorForInitials(shorthand)
+                                        const colorClasses = getColorForWorkSiteInitials(shorthand)
                                         const isSelected = selectedLeaveType[employee.id] === leaveType.id
                                         return (
                                           <button
@@ -1043,7 +1118,7 @@ export function AttendancePageContent() {
                                             }
                                             return workSite.name.substring(0, 2).toUpperCase()
                                           })()
-                                      const colorClasses = getColorForInitials(initials)
+                                      const colorClasses = getColorForWorkSiteInitials(initials)
                                       return (
                                         <button
                                           key={workSite.id}
@@ -1143,7 +1218,7 @@ export function AttendancePageContent() {
                                             }
                                             return workSite.name.substring(0, 2).toUpperCase()
                                           })()
-                                      const colorClasses = getColorForInitials(initials)
+                                      const colorClasses = getColorForWorkSiteInitials(initials)
                                       return (
                                         <button
                                           key={workSite.id}

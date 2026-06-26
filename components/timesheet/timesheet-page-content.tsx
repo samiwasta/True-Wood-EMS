@@ -5,7 +5,6 @@ import { useEmployees, Employee } from '@/lib/hooks/useEmployees'
 import { useCategories } from '@/lib/hooks/useCategories'
 import { useWorkSites, WorkSite } from '@/lib/hooks/useWorkSites'
 import { AttendanceService } from '@/lib/services/attendance.service'
-import { WorkSiteService } from '@/lib/services/work-site.service'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -194,10 +193,6 @@ export function TimesheetPageContent() {
   const [editBreakHours, setEditBreakHours] = useState('')
   const [editProjectId, setEditProjectId] = useState<string>('__none__')
   const [editSaving, setEditSaving] = useState(false)
-  /** Project times effective on selected date (for correct overtime). */
-  const [workSiteTimesOnDate, setWorkSiteTimesOnDate] = useState<
-    Record<string, { time_in: string | null; time_out: string | null; break_hours: number | null }>
-  >({})
 
   // Monthly tab state
   const [activeTab, setActiveTab] = useState<'daily' | 'monthly'>('daily')
@@ -207,9 +202,6 @@ export function TimesheetPageContent() {
     return d
   })
   const [recordsInRange, setRecordsInRange] = useState<TimesheetRecord[]>([])
-  const [workSiteTimesByDate, setWorkSiteTimesByDate] = useState<
-    Record<string, Record<string, { time_in: string | null; time_out: string | null; break_hours: number | null }>>
-  >({})
   const [loadingMonthly, setLoadingMonthly] = useState(false)
   const [viewDialogOpen, setViewDialogOpen] = useState(false)
   const [viewEmployee, setViewEmployee] = useState<Employee | null>(null)
@@ -264,11 +256,6 @@ export function TimesheetPageContent() {
     fetchTimesheet(selectedDate)
   }, [selectedDate])
 
-  useEffect(() => {
-    const dateStr = format(selectedDate, 'yyyy-MM-dd')
-    WorkSiteService.getWorkSiteTimesForAllSitesOnDate(dateStr).then(setWorkSiteTimesOnDate)
-  }, [selectedDate])
-
   // ─── Monthly: working month 26th to 25th ──────────────────────────
 
   /** Working month: from 26th of previous calendar month to 25th of selected month. */
@@ -296,28 +283,16 @@ export function TimesheetPageContent() {
     setLoadingMonthly(true)
     const startStr = format(workingMonthStart, 'yyyy-MM-dd')
     const endStr = format(workingMonthEnd, 'yyyy-MM-dd')
-    const dates = workingMonthDates
-    Promise.all([
-      AttendanceService.getTimesheetByDateRange(startStr, endStr),
-      ...dates.map((d) =>
-        WorkSiteService.getWorkSiteTimesForAllSitesOnDate(d).then((times) => ({ date: d, times }))
-      ),
-    ])
-      .then(([recs, ...dateTimes]) => {
+    AttendanceService.getTimesheetByDateRange(startStr, endStr)
+      .then((recs) => {
         setRecordsInRange((recs as TimesheetRecord[]) || [])
-        const byDate: typeof workSiteTimesByDate = {}
-        dateTimes.forEach(({ date, times }) => {
-          byDate[date] = times
-        })
-        setWorkSiteTimesByDate(byDate)
       })
       .catch((err) => {
         console.error('Error fetching monthly timesheet:', err)
         setRecordsInRange([])
-        setWorkSiteTimesByDate({})
       })
       .finally(() => setLoadingMonthly(false))
-  }, [activeTab, workingMonthStart, workingMonthEnd, workingMonthDates])
+  }, [activeTab, workingMonthStart, workingMonthEnd])
 
   // ─── Grouping ─────────────────────────────────────────────────────
 
@@ -362,35 +337,33 @@ export function TimesheetPageContent() {
 
   const getRecord = (employeeId: string) => recordsByEmployeeId[employeeId]
 
-  /** Get actual time_in: from timesheet record (can be edited), work site, or category */
+  /** Get actual time_in from attendance record, or scheduled fallback when not yet saved. */
   const getDefaultTimeIn = (employee: Employee, record: TimesheetRecord | undefined) => {
     if (record?.time_in) return record.time_in
     if (record?.work_site_id) {
-      const times = workSiteTimesOnDate[record.work_site_id]
-      if (times?.time_in) return times.time_in
+      const ws = workSiteMap[record.work_site_id]
+      if (ws?.time_in) return ws.time_in
     }
     const catId = employee.category_id || employee.category?.id
     const cat = catId ? categoryMap[catId] : null
     return cat?.time_in ?? ''
   }
 
-  /** Get actual time_out: from timesheet record (can be edited), work site on date, or category */
+  /** Get actual time_out from attendance record, or scheduled fallback when not yet saved. */
   const getDefaultTimeOut = (employee: Employee, record: TimesheetRecord | undefined) => {
     if (record?.time_out) return record.time_out
     if (record?.work_site_id) {
-      const times = workSiteTimesOnDate[record.work_site_id]
-      if (times?.time_out) return times.time_out
+      const ws = workSiteMap[record.work_site_id]
+      if (ws?.time_out) return ws.time_out
     }
     const catId = employee.category_id || employee.category?.id
     const cat = catId ? categoryMap[catId] : null
     return cat?.time_out ?? ''
   }
 
-  /** Get scheduled time_in for overtime: work site on date, current work site, or category (not actual record times). */
+  /** Scheduled time_in from Work Sites or Settings (category), not actual attendance times. */
   const getExpectedStartTime = (employee: Employee, record: TimesheetRecord | undefined) => {
     if (record?.work_site_id) {
-      const times = workSiteTimesOnDate[record.work_site_id]
-      if (times?.time_in) return times.time_in
       const ws = workSiteMap[record.work_site_id]
       if (ws?.time_in) return ws.time_in
     }
@@ -399,11 +372,9 @@ export function TimesheetPageContent() {
     return cat?.time_in ?? null
   }
 
-  /** Get scheduled time_out for overtime: work site on date, current work site, or category (not actual record times). */
+  /** Scheduled time_out from Work Sites or Settings (category), not actual attendance times. */
   const getExpectedEndTime = (employee: Employee, record: TimesheetRecord | undefined) => {
     if (record?.work_site_id) {
-      const times = workSiteTimesOnDate[record.work_site_id]
-      if (times?.time_out) return times.time_out
       const ws = workSiteMap[record.work_site_id]
       if (ws?.time_out) return ws.time_out
     }
@@ -412,43 +383,52 @@ export function TimesheetPageContent() {
     return cat?.time_out ?? null
   }
 
-  /** Break hours for display and overtime: from record, work site on date, or category. */
+  /** Actual break hours from attendance record, or scheduled fallback. */
   const getBreakHours = (employee: Employee, record: TimesheetRecord | undefined): number => {
     if (record?.break_hours != null) return record.break_hours
+    return getExpectedBreakHours(employee, record)
+  }
+
+  /** Scheduled break hours from Work Sites or Settings (category). */
+  const getExpectedBreakHours = (employee: Employee, record: TimesheetRecord | undefined): number => {
     if (record?.work_site_id) {
-      const times = workSiteTimesOnDate[record.work_site_id]
-      if (times?.break_hours != null) return times.break_hours
+      const ws = workSiteMap[record.work_site_id]
+      if (ws?.break_hours != null) return ws.break_hours
     }
     const catId = employee.category_id || employee.category?.id
     const cat = catId ? categoryMap[catId] : null
     return cat?.break_hours ?? 0
   }
 
-  /** Break hours for a record on a specific date (monthly view uses workSiteTimesByDate). */
   const getBreakHoursForDate = (
     employee: Employee,
     record: TimesheetRecord,
-    dateStr: string
+    _dateStr: string
   ): number => {
     if (record.break_hours != null) return record.break_hours
-    const byDate = workSiteTimesByDate[dateStr]
-    if (record.work_site_id && byDate?.[record.work_site_id]?.break_hours != null)
-      return byDate[record.work_site_id].break_hours!
+    return getExpectedBreakHoursForDate(employee, record)
+  }
+
+  const getExpectedBreakHoursForDate = (
+    employee: Employee,
+    record: TimesheetRecord
+  ): number => {
+    if (record.work_site_id) {
+      const ws = workSiteMap[record.work_site_id]
+      if (ws?.break_hours != null) return ws.break_hours
+    }
     const catId = employee.category_id || employee.category?.id
     const cat = catId ? categoryMap[catId] : null
     return cat?.break_hours ?? 0
   }
 
-  /** Scheduled start for overtime on a specific date (monthly view; not actual record times). */
+  /** Scheduled start from Work Sites or Settings for overtime (monthly view). */
   const getExpectedStartForDate = (
     employee: Employee,
     record: TimesheetRecord,
-    dateStr: string
+    _dateStr: string
   ): string | null => {
-    const byDate = workSiteTimesByDate[dateStr]
     if (record.work_site_id) {
-      if (byDate?.[record.work_site_id]?.time_in != null)
-        return byDate[record.work_site_id].time_in
       const ws = workSiteMap[record.work_site_id]
       if (ws?.time_in) return ws.time_in
     }
@@ -460,12 +440,9 @@ export function TimesheetPageContent() {
   const getExpectedEndForDate = (
     employee: Employee,
     record: TimesheetRecord,
-    dateStr: string
+    _dateStr: string
   ): string | null => {
-    const byDate = workSiteTimesByDate[dateStr]
     if (record.work_site_id) {
-      if (byDate?.[record.work_site_id]?.time_out != null)
-        return byDate[record.work_site_id].time_out
       const ws = workSiteMap[record.work_site_id]
       if (ws?.time_out) return ws.time_out
     }
@@ -474,20 +451,24 @@ export function TimesheetPageContent() {
     return cat?.time_out ?? null
   }
 
-  /** Default time in/out for a record (monthly: from record or work site on date, or category). */
-  const getTimeInForRecord = (employee: Employee, record: TimesheetRecord, dateStr: string): string => {
+  /** Actual time in from attendance record (monthly view). */
+  const getTimeInForRecord = (employee: Employee, record: TimesheetRecord, _dateStr: string): string => {
     if (record.time_in) return record.time_in
-    const byDate = workSiteTimesByDate[dateStr]
-    if (record.work_site_id && byDate?.[record.work_site_id]?.time_in) return byDate[record.work_site_id].time_in!
+    if (record.work_site_id) {
+      const ws = workSiteMap[record.work_site_id]
+      if (ws?.time_in) return ws.time_in
+    }
     const catId = employee.category_id || employee.category?.id
     const cat = catId ? categoryMap[catId] : null
     return cat?.time_in ?? ''
   }
 
-  const getTimeOutForRecord = (employee: Employee, record: TimesheetRecord, dateStr: string): string => {
+  const getTimeOutForRecord = (employee: Employee, record: TimesheetRecord, _dateStr: string): string => {
     if (record.time_out) return record.time_out
-    const byDate = workSiteTimesByDate[dateStr]
-    if (record.work_site_id && byDate?.[record.work_site_id]?.time_out) return byDate[record.work_site_id].time_out!
+    if (record.work_site_id) {
+      const ws = workSiteMap[record.work_site_id]
+      if (ws?.time_out) return ws.time_out
+    }
     const catId = employee.category_id || employee.category?.id
     const cat = catId ? categoryMap[catId] : null
     return cat?.time_out ?? ''
@@ -634,6 +615,7 @@ export function TimesheetPageContent() {
       const timeIn = getTimeInForRecord(emp, record, dateStr)
       const timeOut = getTimeOutForRecord(emp, record, dateStr)
       const breakHrs = getBreakHoursForDate(emp, record, dateStr)
+      const expectedBreakHrs = getExpectedBreakHoursForDate(emp, record)
       const expStart = getExpectedStartForDate(emp, record, dateStr)
       const expEnd = getExpectedEndForDate(emp, record, dateStr)
 
@@ -653,7 +635,7 @@ export function TimesheetPageContent() {
       // Overtime (regular days only, not Sundays)
       const overtimeMins =
         record.status === 'present' && !isSunday
-          ? calculateOvertimeMinutes(timeIn, timeOut, expStart, expEnd, breakHrs, breakHrs, dateStr)
+          ? calculateOvertimeMinutes(timeIn, timeOut, expStart, expEnd, breakHrs, expectedBreakHrs, dateStr)
           : null
       const overtimeStr = (overtimeMins != null && overtimeMins > 0) ? formatMinutesToDuration(overtimeMins) : '-'
 
@@ -991,6 +973,7 @@ export function TimesheetPageContent() {
                       const expectedStart = getExpectedStartTime(employee, record)
                       const expectedEnd = getExpectedEndTime(employee, record)
                       const breakHrs = getBreakHours(employee, record)
+                      const expectedBreakHrs = getExpectedBreakHours(employee, record)
                       
                       const workingMins = isPresent ? calculateWorkingHours(timeIn, timeOut, breakHrs, selectedDate) : null
                       const workingHoursStr = workingMins != null ? formatMinutesToDuration(workingMins) : '-'
@@ -1002,7 +985,7 @@ export function TimesheetPageContent() {
                             expectedStart,
                             expectedEnd,
                             breakHrs,
-                            breakHrs,
+                            expectedBreakHrs,
                             selectedDate
                           )
                         : null
