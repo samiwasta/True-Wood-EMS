@@ -33,6 +33,7 @@ import { toHHmm } from '@/lib/utils/time.utils'
 import {
   getWorkSiteInitials,
   getColorForWorkSiteInitials,
+  getChipColorForWorkSiteInitials,
   WAREHOUSE_CHIP_CLASSES,
   OFFICE_CHIP_CLASSES,
 } from '@/lib/utils/work-site.utils'
@@ -153,15 +154,14 @@ export function AttendancePageContent() {
       const workSite = workSiteById[record.work_site_id]
       if (workSite) {
         const initials = getWorkSiteInitials(workSite.name, workSite.short_hand)
-        const colors = getColorForWorkSiteInitials(initials)
         return {
           label: workSite.short_hand?.trim() || workSite.name,
-          className: `${colors.bg} ${colors.text}`,
+          className: getChipColorForWorkSiteInitials(initials),
         }
       }
       return {
         label: 'Project Site',
-        className: `${getColorForWorkSiteInitials('PS').bg} ${getColorForWorkSiteInitials('PS').text}`,
+        className: getChipColorForWorkSiteInitials('PS'),
       }
     }
 
@@ -908,14 +908,14 @@ export function AttendancePageContent() {
                         {employee.employee_id || '-'}
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-900">
-                        <div className="flex items-center gap-2 flex-wrap">
+                        <div className="flex flex-col gap-1.5">
+                          <span className="font-medium">{employee.name}</span>
                           {yesterdayChip && (
                             <YesterdayLocationChip
                               label={yesterdayChip.label}
                               className={yesterdayChip.className}
                             />
                           )}
-                          <span className="font-medium">{employee.name}</span>
                         </div>
                       </td>
                       <td className="px-6 py-4 min-w-[42rem]">
