@@ -155,7 +155,7 @@ export function AttendancePageContent() {
       if (workSite) {
         const initials = getWorkSiteInitials(workSite.name, workSite.short_hand)
         return {
-          label: workSite.short_hand?.trim() || workSite.name,
+          label: workSite.short_hand?.trim() || initials,
           className: getChipColorForWorkSiteInitials(initials),
         }
       }
