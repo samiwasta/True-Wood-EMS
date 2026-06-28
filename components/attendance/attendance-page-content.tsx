@@ -330,8 +330,20 @@ export function AttendancePageContent() {
           isFieldStaffEmployee(r.employee_id)
       ) as { time_in?: string | null; time_out?: string | null; break_hours?: number | null; employee_id?: string } | undefined
 
-      const warehouseScheduled = warehouseRecord?.employee_id
-        ? getCategoryScheduledTimes(warehouseRecord.employee_id)
+      // Scheduled warehouse times come from the category of a field-staff employee currently
+      // marked present without a project (works even before attendance is saved).
+      const presentWarehouseEmployee = employees.find((emp) => {
+        const rec = attendanceRecords[emp.id]
+        if (!rec || rec.status !== 'present') return false
+        const wsId = selectedWorkSite[emp.id] ?? rec.work_site_id ?? null
+        if (wsId) return false
+        return isFieldStaffCategory(emp.category?.name)
+      })
+
+      const warehouseScheduledEmployeeId =
+        presentWarehouseEmployee?.id || warehouseRecord?.employee_id
+      const warehouseScheduled = warehouseScheduledEmployeeId
+        ? getCategoryScheduledTimes(warehouseScheduledEmployeeId)
         : { timeIn: '', timeOut: '', breakHours: 1 }
 
       initial[WAREHOUSE_KEY] = {

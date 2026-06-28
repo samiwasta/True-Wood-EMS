@@ -19,7 +19,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Calendar } from '@/components/ui/calendar'
 import { format } from 'date-fns'
 import { WorkSiteService } from '@/lib/services/work-site.service'
-import { formatTime12hOrDash } from '@/lib/utils/time.utils'
+import { TimeInput } from '@/components/ui/time-input'
+import { formatTime12hOrDash, toHHmm } from '@/lib/utils/time.utils'
 
 const getInitials = (name: string, shortHand?: string): string => {
   if (shortHand && shortHand.trim()) {
@@ -62,6 +63,9 @@ export function WorkSitesList() {
   const [status, setStatus] = useState<string>('active')
   const [startDate, setStartDate] = useState<Date | undefined>(undefined)
   const [endDate, setEndDate] = useState<Date | undefined>(undefined)
+  const [timeIn, setTimeIn] = useState('')
+  const [timeOut, setTimeOut] = useState('')
+  const [breakHours, setBreakHours] = useState('')
   const [editingWorkSite, setEditingWorkSite] = useState<WorkSite | null>(null)
   const [deletingWorkSite, setDeletingWorkSite] = useState<WorkSite | null>(null)
   const [historyWorkSite, setHistoryWorkSite] = useState<WorkSite | null>(null)
@@ -106,7 +110,10 @@ export function WorkSitesList() {
         status, 
         shortHand || undefined,
         startDate ? format(startDate, 'yyyy-MM-dd') : undefined,
-        endDate ? format(endDate, 'yyyy-MM-dd') : undefined
+        endDate ? format(endDate, 'yyyy-MM-dd') : undefined,
+        timeIn || undefined,
+        timeOut || undefined,
+        breakHours.trim() === '' ? undefined : breakHours
       )
       
       // Reset form and close dialog
@@ -116,6 +123,9 @@ export function WorkSitesList() {
       setStatus('active')
       setStartDate(undefined)
       setEndDate(undefined)
+      setTimeIn('')
+      setTimeOut('')
+      setBreakHours('')
       setIsAddDialogOpen(false)
     } catch (error) {
       console.error('Error adding work site:', error)
@@ -142,7 +152,10 @@ export function WorkSitesList() {
         status, 
         shortHand || undefined,
         startDate ? format(startDate, 'yyyy-MM-dd') : undefined,
-        endDate ? format(endDate, 'yyyy-MM-dd') : undefined
+        endDate ? format(endDate, 'yyyy-MM-dd') : undefined,
+        timeIn || undefined,
+        timeOut || undefined,
+        breakHours.trim() === '' ? null : breakHours
       )
       
       // Reset form and close dialog
@@ -152,6 +165,9 @@ export function WorkSitesList() {
       setStatus('active')
       setStartDate(undefined)
       setEndDate(undefined)
+      setTimeIn('')
+      setTimeOut('')
+      setBreakHours('')
       setEditingWorkSite(null)
       setIsEditDialogOpen(false)
     } catch (error) {
@@ -191,6 +207,9 @@ export function WorkSitesList() {
       setStatus('active')
       setStartDate(undefined)
       setEndDate(undefined)
+      setTimeIn('')
+      setTimeOut('')
+      setBreakHours('')
       setShowStartCalendar(false)
       setShowEndCalendar(false)
     }
@@ -204,6 +223,9 @@ export function WorkSitesList() {
     setStatus(workSite.status)
     setStartDate(workSite.start_date ? new Date(workSite.start_date) : undefined)
     setEndDate(workSite.end_date ? new Date(workSite.end_date) : undefined)
+    setTimeIn(toHHmm(workSite.time_in || ''))
+    setTimeOut(toHHmm(workSite.time_out || ''))
+    setBreakHours(workSite.break_hours != null ? String(workSite.break_hours) : '')
     setIsEditDialogOpen(true)
   }
 
@@ -216,6 +238,9 @@ export function WorkSitesList() {
       setStatus('active')
       setStartDate(undefined)
       setEndDate(undefined)
+      setTimeIn('')
+      setTimeOut('')
+      setBreakHours('')
       setEditingWorkSite(null)
       setShowStartCalendar(false)
       setShowEndCalendar(false)
@@ -284,7 +309,7 @@ export function WorkSitesList() {
               Add Work Site
             </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-[500px]">
+          <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle className="text-xl font-semibold text-gray-900 flex items-center gap-2">
                 Add New Work Site
@@ -446,26 +471,54 @@ export function WorkSitesList() {
                       </div>
                     )}
                   </div>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-700 block">
+                Scheduled Work Times <span className="text-gray-400 text-xs">(used for overtime)</span>
+              </label>
+              <div className="rounded-lg border border-gray-200 divide-y divide-gray-100">
+                <div className="flex items-center justify-between gap-3 px-3 py-2.5">
+                  <span className="text-sm text-gray-600">Time In</span>
+                  <TimeInput value={timeIn} onChange={setTimeIn} disabled={isSubmitting} />
+                </div>
+                <div className="flex items-center justify-between gap-3 px-3 py-2.5">
+                  <span className="text-sm text-gray-600">Time Out</span>
+                  <TimeInput value={timeOut} onChange={setTimeOut} disabled={isSubmitting} />
+                </div>
+                <div className="flex items-center justify-between gap-3 px-3 py-2.5">
+                  <span className="text-sm text-gray-600">Break (hrs)</span>
+                  <Input
+                    type="number"
+                    min={0}
+                    step={0.5}
+                    placeholder="1"
+                    value={breakHours}
+                    onChange={(e) => setBreakHours(e.target.value)}
+                    className="h-9 w-[120px] border-gray-300"
+                    disabled={isSubmitting}
+                  />
                 </div>
               </div>
-              <DialogFooter className="gap-3">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => handleAddDialogOpenChange(false)}
-                  disabled={isSubmitting}
-                  className="border-gray-300 text-gray-700 hover:bg-gray-50"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type="submit"
-                  disabled={!siteName.trim() || !location.trim() || !startDate || isSubmitting}
-                  className="bg-[#23887C] hover:bg-[#23887C]/90 text-white disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {isSubmitting ? (
-                    <>
-                      <span className="mr-2">Adding...</span>
+            </div>
+            <DialogFooter className="gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => handleAddDialogOpenChange(false)}
+                disabled={isSubmitting}
+                className="border-gray-300 text-gray-700 hover:bg-gray-50"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={!siteName.trim() || !location.trim() || !startDate || isSubmitting}
+                className="bg-[#23887C] hover:bg-[#23887C]/90 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isSubmitting ? (
+                  <>
+                    <span className="mr-2">Adding...</span>
                       <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                     </>
                   ) : (
@@ -566,7 +619,7 @@ export function WorkSitesList() {
 
       {/* Edit Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={handleEditDialogOpenChange}>
-        <DialogContent className="sm:max-w-[500px]">
+        <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-xl font-semibold text-gray-900 flex items-center gap-2">
               Edit Work Site
@@ -727,6 +780,34 @@ export function WorkSitesList() {
                       />
                     </div>
                   )}
+                </div>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-700 block">
+                Scheduled Work Times <span className="text-gray-400 text-xs">(used for overtime)</span>
+              </label>
+              <div className="rounded-lg border border-gray-200 divide-y divide-gray-100">
+                <div className="flex items-center justify-between gap-3 px-3 py-2.5">
+                  <span className="text-sm text-gray-600">Time In</span>
+                  <TimeInput value={timeIn} onChange={setTimeIn} disabled={isSubmitting} />
+                </div>
+                <div className="flex items-center justify-between gap-3 px-3 py-2.5">
+                  <span className="text-sm text-gray-600">Time Out</span>
+                  <TimeInput value={timeOut} onChange={setTimeOut} disabled={isSubmitting} />
+                </div>
+                <div className="flex items-center justify-between gap-3 px-3 py-2.5">
+                  <span className="text-sm text-gray-600">Break (hrs)</span>
+                  <Input
+                    type="number"
+                    min={0}
+                    step={0.5}
+                    placeholder="1"
+                    value={breakHours}
+                    onChange={(e) => setBreakHours(e.target.value)}
+                    className="h-9 w-[120px] border-gray-300"
+                    disabled={isSubmitting}
+                  />
                 </div>
               </div>
             </div>
