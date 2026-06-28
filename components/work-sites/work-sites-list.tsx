@@ -473,32 +473,49 @@ export function WorkSitesList() {
                   </div>
               </div>
             </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-700 block">
-                Scheduled Work Times <span className="text-gray-400 text-xs">(used for overtime)</span>
-              </label>
-              <div className="rounded-lg border border-gray-200 divide-y divide-gray-100">
-                <div className="flex items-center justify-between gap-3 px-3 py-2.5">
-                  <span className="text-sm text-gray-600">Time In</span>
-                  <TimeInput value={timeIn} onChange={setTimeIn} disabled={isSubmitting} />
-                </div>
-                <div className="flex items-center justify-between gap-3 px-3 py-2.5">
-                  <span className="text-sm text-gray-600">Time Out</span>
-                  <TimeInput value={timeOut} onChange={setTimeOut} disabled={isSubmitting} />
-                </div>
-                <div className="flex items-center justify-between gap-3 px-3 py-2.5">
-                  <span className="text-sm text-gray-600">Break (hrs)</span>
-                  <Input
-                    type="number"
-                    min={0}
-                    step={0.5}
-                    placeholder="1"
-                    value={breakHours}
-                    onChange={(e) => setBreakHours(e.target.value)}
-                    className="h-9 w-[120px] border-gray-300"
+            <div className="space-y-4 pt-1 border-t border-gray-100">
+              <p className="text-sm font-medium text-gray-700">
+                Scheduled Work Times <span className="text-gray-400 text-xs font-normal">(used for overtime)</span>
+              </p>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label htmlFor="add-time-in" className="text-sm font-medium text-gray-700 block">
+                    Time In
+                  </label>
+                  <TimeInput
+                    grouped
+                    value={timeIn}
+                    onChange={setTimeIn}
                     disabled={isSubmitting}
                   />
                 </div>
+                <div className="space-y-2">
+                  <label htmlFor="add-time-out" className="text-sm font-medium text-gray-700 block">
+                    Time Out
+                  </label>
+                  <TimeInput
+                    grouped
+                    value={timeOut}
+                    onChange={setTimeOut}
+                    disabled={isSubmitting}
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <label htmlFor="add-break-hours" className="text-sm font-medium text-gray-700 block">
+                  Break hours <span className="text-gray-400 text-xs">(Optional)</span>
+                </label>
+                <Input
+                  id="add-break-hours"
+                  type="number"
+                  min={0}
+                  step={0.5}
+                  placeholder="e.g. 1 or 1.5"
+                  value={breakHours}
+                  onChange={(e) => setBreakHours(e.target.value)}
+                  className="h-11 border-gray-300 focus:border-[#23887C] focus:ring-[#23887C] focus:ring-1 transition-all duration-200"
+                  disabled={isSubmitting}
+                />
               </div>
             </div>
             <DialogFooter className="gap-3">
@@ -783,32 +800,49 @@ export function WorkSitesList() {
                 </div>
               </div>
             </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-700 block">
-                Scheduled Work Times <span className="text-gray-400 text-xs">(used for overtime)</span>
-              </label>
-              <div className="rounded-lg border border-gray-200 divide-y divide-gray-100">
-                <div className="flex items-center justify-between gap-3 px-3 py-2.5">
-                  <span className="text-sm text-gray-600">Time In</span>
-                  <TimeInput value={timeIn} onChange={setTimeIn} disabled={isSubmitting} />
-                </div>
-                <div className="flex items-center justify-between gap-3 px-3 py-2.5">
-                  <span className="text-sm text-gray-600">Time Out</span>
-                  <TimeInput value={timeOut} onChange={setTimeOut} disabled={isSubmitting} />
-                </div>
-                <div className="flex items-center justify-between gap-3 px-3 py-2.5">
-                  <span className="text-sm text-gray-600">Break (hrs)</span>
-                  <Input
-                    type="number"
-                    min={0}
-                    step={0.5}
-                    placeholder="1"
-                    value={breakHours}
-                    onChange={(e) => setBreakHours(e.target.value)}
-                    className="h-9 w-[120px] border-gray-300"
+            <div className="space-y-4 pt-1 border-t border-gray-100">
+              <p className="text-sm font-medium text-gray-700">
+                Scheduled Work Times <span className="text-gray-400 text-xs font-normal">(used for overtime)</span>
+              </p>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label htmlFor="edit-time-in" className="text-sm font-medium text-gray-700 block">
+                    Time In
+                  </label>
+                  <TimeInput
+                    grouped
+                    value={timeIn}
+                    onChange={setTimeIn}
                     disabled={isSubmitting}
                   />
                 </div>
+                <div className="space-y-2">
+                  <label htmlFor="edit-time-out" className="text-sm font-medium text-gray-700 block">
+                    Time Out
+                  </label>
+                  <TimeInput
+                    grouped
+                    value={timeOut}
+                    onChange={setTimeOut}
+                    disabled={isSubmitting}
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <label htmlFor="edit-break-hours" className="text-sm font-medium text-gray-700 block">
+                  Break hours <span className="text-gray-400 text-xs">(Optional)</span>
+                </label>
+                <Input
+                  id="edit-break-hours"
+                  type="number"
+                  min={0}
+                  step={0.5}
+                  placeholder="e.g. 1 or 1.5"
+                  value={breakHours}
+                  onChange={(e) => setBreakHours(e.target.value)}
+                  className="h-11 border-gray-300 focus:border-[#23887C] focus:ring-[#23887C] focus:ring-1 transition-all duration-200"
+                  disabled={isSubmitting}
+                />
               </div>
             </div>
             <DialogFooter className="gap-3">
