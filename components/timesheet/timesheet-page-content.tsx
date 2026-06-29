@@ -4,6 +4,11 @@ import React, { useState, useEffect, useMemo } from 'react'
 import { useEmployees, Employee } from '@/lib/hooks/useEmployees'
 import { useCategories } from '@/lib/hooks/useCategories'
 import { useWorkSites, WorkSite } from '@/lib/hooks/useWorkSites'
+import { useHolidays } from '@/lib/hooks/useHolidays'
+import { useWeeklyOff } from '@/lib/hooks/useWeeklyOff'
+import { getNonWorkingDayInfo } from '@/lib/utils/reports.utils'
+import { isOfficeStaffCategory } from '@/lib/utils/category.utils'
+import { NonWorkingDayBadge } from '@/components/timesheet/non-working-day-badge'
 import { AttendanceService } from '@/lib/services/attendance.service'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Button } from '@/components/ui/button'
@@ -82,24 +87,18 @@ function calculateWorkingHours(
   timeIn: string | null | undefined,
   timeOut: string | null | undefined,
   breakHours: number = 0,
-  date?: Date | string
+  allHoursAreOvertime = false
 ): number | null {
   const inM = parseTimeToMinutes(timeIn)
   const outM = parseTimeToMinutes(timeOut)
   if (inM == null || outM == null) return null
   const totalMins = outM - inM
   if (totalMins <= 0) return 0
-  
-  // Check if the date is Sunday - if so, return 0 working hours (all hours are overtime)
-  if (date) {
-    const dateObj = typeof date === 'string' ? new Date(date + 'T12:00:00') : date
-    const dayOfWeek = dateObj.getDay()
-    if (dayOfWeek === 0) {
-      // Sunday - no working hours, all hours count as overtime
-      return 0
-    }
+
+  if (allHoursAreOvertime) {
+    return 0
   }
-  
+
   const breakMins = breakHours * 60
   const workingMins = Math.max(0, totalMins - breakMins)
   return workingMins
@@ -115,7 +114,7 @@ function calculateWorkingHours(
  * @param expectedEndTime - Expected time out from category/work site
  * @param breakHoursActual - Break hours for actual calculation
  * @param breakHoursExpected - Break hours for expected calculation
- * @param date - Date to check if Sunday (all hours = overtime on Sunday)
+ * @param allHoursAreOvertime - Holiday or weekly-off day: all worked hours are overtime
  * @returns Overtime minutes (excess hours beyond expected working time)
  */
 function calculateOvertimeMinutes(
@@ -125,7 +124,7 @@ function calculateOvertimeMinutes(
   expectedEndTime: string | null | undefined,
   breakHoursActual: number = 0,
   breakHoursExpected: number = 0,
-  date?: Date | string
+  allHoursAreOvertime = false
 ): number | null {
   const inM = parseTimeToMinutes(timeIn)
   const outM = parseTimeToMinutes(timeOut)
@@ -137,14 +136,8 @@ function calculateOvertimeMinutes(
   const breakMinsActual = breakHoursActual * 60
   const actualWorkingMins = Math.max(0, actualDurationMins - breakMinsActual)
 
-  // Check if the date is Sunday (day 0) - if so, all working hours count as overtime
-  if (date) {
-    const dateObj = typeof date === 'string' ? new Date(date + 'T12:00:00') : date
-    const dayOfWeek = dateObj.getDay()
-    if (dayOfWeek === 0) {
-      // Sunday - all working hours are overtime
-      return actualWorkingMins
-    }
+  if (allHoursAreOvertime) {
+    return actualWorkingMins
   }
 
   const expectedDuration =
@@ -177,6 +170,8 @@ export function TimesheetPageContent() {
   const { employees, loading: employeesLoading } = useEmployees()
   const { categories } = useCategories()
   const { workSites } = useWorkSites()
+  const { holidays } = useHolidays()
+  const { weeklyOff } = useWeeklyOff()
 
   const [selectedDate, setSelectedDate] = useState<Date>(new Date())
   const [records, setRecords] = useState<TimesheetRecord[]>([])
@@ -227,6 +222,11 @@ export function TimesheetPageContent() {
   }, [workSites])
 
   const activeWorkSites = useMemo(() => workSites.filter((ws) => ws.status === 'active'), [workSites])
+
+  const selectedDayInfo = useMemo(
+    () => getNonWorkingDayInfo(selectedDate, holidays, weeklyOff),
+    [selectedDate, holidays, weeklyOff]
+  )
 
   const recordsByEmployeeId = useMemo(() => {
     const m: Record<string, TimesheetRecord> = {}
@@ -585,13 +585,13 @@ export function TimesheetPageContent() {
 
     return workingMonthDates.map((dateStr) => {
       const dateObj = new Date(dateStr + 'T12:00:00')
-      const isSunday = dateObj.getDay() === 0
+      const nonWorkingDay = getNonWorkingDayInfo(dateStr, holidays, weeklyOff)
       const dayName = getDayName(dateStr)
       const record = recordsByDate.get(dateStr)
       const workSiteName = record?.work_site_id
         ? (workSiteMap[record.work_site_id]?.short_hand || workSiteMap[record.work_site_id]?.name || '-')
         : '-'
-      const dayInfo = isSunday ? 'Week Off' : ''
+      const dayInfo = nonWorkingDay.isNonWorkingDay ? nonWorkingDay.label : ''
 
       if (!record) {
         return {
@@ -608,7 +608,8 @@ export function TimesheetPageContent() {
           overtime: '-',
           holidayOvertime: '-',
           status: 'Not Marked',
-          isSunday,
+          isNonWorkingDay: nonWorkingDay.isNonWorkingDay,
+          nonWorkingDayType: nonWorkingDay.type,
         }
       }
 
@@ -632,16 +633,18 @@ export function TimesheetPageContent() {
       const actualMins = totalMins != null ? Math.max(0, totalMins - breakMins) : null
       const actualHoursStr = actualMins != null ? formatMinutesToDuration(actualMins) : '-'
 
-      // Overtime (regular days only, not Sundays)
+      // Overtime (regular days only; Office Staff excluded except on holidays/week off)
       const overtimeMins =
-        record.status === 'present' && !isSunday
-          ? calculateOvertimeMinutes(timeIn, timeOut, expStart, expEnd, breakHrs, expectedBreakHrs, dateStr)
+        record.status === 'present' &&
+        !nonWorkingDay.isNonWorkingDay &&
+        !isOfficeStaffCategory(emp.category?.name)
+          ? calculateOvertimeMinutes(timeIn, timeOut, expStart, expEnd, breakHrs, expectedBreakHrs, false)
           : null
       const overtimeStr = (overtimeMins != null && overtimeMins > 0) ? formatMinutesToDuration(overtimeMins) : '-'
 
-      // Holiday Overtime (work done on Sundays)
+      // Holiday / week-off overtime (all worked hours on non-working days)
       const holidayOvertimeMins =
-        record.status === 'present' && isSunday && actualMins != null
+        record.status === 'present' && nonWorkingDay.isNonWorkingDay && actualMins != null
           ? actualMins
           : null
       const holidayOvertimeStr = (holidayOvertimeMins != null && holidayOvertimeMins > 0) ? formatMinutesToDuration(holidayOvertimeMins) : '-'
@@ -662,7 +665,8 @@ export function TimesheetPageContent() {
         overtime: overtimeStr,
         holidayOvertime: holidayOvertimeStr,
         status: record.status,
-        isSunday,
+        isNonWorkingDay: nonWorkingDay.isNonWorkingDay,
+        nonWorkingDayType: nonWorkingDay.type,
       }
     })
   }
@@ -857,22 +861,13 @@ export function TimesheetPageContent() {
               <Button variant="outline" size="icon" onClick={handleNextDay} aria-label="Next day">
                 <ChevronRight className="h-4 w-4" />
               </Button>
-              {(() => {
-                const dayOfWeek = selectedDate.getDay()
-                const dayNames = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY']
-                const isSunday = dayOfWeek === 0
-                return (
-                  <span
-                    className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${
-                      isSunday
-                        ? 'bg-red-100 text-red-800'
-                        : 'bg-blue-100 text-blue-800'
-                    }`}
-                  >
-                    {isSunday ? 'WEEKOFF' : 'WEEK'} ({dayNames[dayOfWeek]})
-                  </span>
-                )
-              })()}
+              {selectedDayInfo.isNonWorkingDay ? (
+                <NonWorkingDayBadge info={selectedDayInfo} />
+              ) : (
+                <span className="inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold bg-blue-100 text-blue-800">
+                  WEEK ({['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'][selectedDate.getDay()]})
+                </span>
+              )}
             </>
           )}
           {activeTab === 'monthly' && (
@@ -923,6 +918,20 @@ export function TimesheetPageContent() {
       </div>
 
       <TabsContent value="daily" className="mt-0 flex-1 flex flex-col min-h-0 data-[state=inactive]:hidden overflow-hidden">
+      {selectedDayInfo.isNonWorkingDay && (
+        <div
+          className={`mb-3 flex flex-wrap items-center gap-2 rounded-lg border px-4 py-2.5 ${
+            selectedDayInfo.type === 'holiday'
+              ? 'border-blue-200 bg-blue-50'
+              : 'border-red-200 bg-red-50'
+          }`}
+        >
+          <NonWorkingDayBadge info={selectedDayInfo} />
+          <span className="text-sm text-gray-600">
+            All worked hours on this day count as holiday overtime.
+          </span>
+        </div>
+      )}
       <div className="bg-white rounded-lg border border-gray-200 flex-1 min-h-0 overflow-auto">
         <div className="min-w-max">
           <Table>
@@ -974,20 +983,24 @@ export function TimesheetPageContent() {
                       const expectedEnd = getExpectedEndTime(employee, record)
                       const breakHrs = getBreakHours(employee, record)
                       const expectedBreakHrs = getExpectedBreakHours(employee, record)
+                      const allHoursAreOvertime = selectedDayInfo.isNonWorkingDay
+                      const isOfficeStaff = isOfficeStaffCategory(employee.category?.name)
                       
-                      const workingMins = isPresent ? calculateWorkingHours(timeIn, timeOut, breakHrs, selectedDate) : null
+                      const workingMins = isPresent ? calculateWorkingHours(timeIn, timeOut, breakHrs, allHoursAreOvertime) : null
                       const workingHoursStr = workingMins != null ? formatMinutesToDuration(workingMins) : '-'
                       
                       const overtimeMins = isPresent
-                        ? calculateOvertimeMinutes(
-                            timeIn,
-                            timeOut,
-                            expectedStart,
-                            expectedEnd,
-                            breakHrs,
-                            expectedBreakHrs,
-                            selectedDate
-                          )
+                        ? isOfficeStaff && !allHoursAreOvertime
+                          ? 0
+                          : calculateOvertimeMinutes(
+                              timeIn,
+                              timeOut,
+                              expectedStart,
+                              expectedEnd,
+                              breakHrs,
+                              expectedBreakHrs,
+                              allHoursAreOvertime
+                            )
                         : null
                       const overtimeStr = overtimeMins != null ? formatMinutesToDuration(overtimeMins) : '0'
 
@@ -1281,17 +1294,28 @@ export function TimesheetPageContent() {
                       viewRows.map((row) => (
                         <TableRow
                           key={row.date}
-                          className={row.isSunday ? 'bg-red-50 hover:bg-red-100' : ''}
+                          className={
+                            row.isNonWorkingDay
+                              ? row.nonWorkingDayType === 'holiday'
+                                ? 'bg-blue-50 hover:bg-blue-100'
+                                : 'bg-red-50 hover:bg-red-100'
+                              : ''
+                          }
                         >
                           <TableCell className="font-medium whitespace-nowrap">{row.dateFormatted}</TableCell>
                           <TableCell>{row.dayName}</TableCell>
                           <TableCell>{row.workSite}</TableCell>
                           <TableCell>
-                            {row.dayInfo && (
-                              <span className="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-800">
-                                {row.dayInfo}
-                              </span>
-                            )}
+                            {row.dayInfo ? (
+                              <NonWorkingDayBadge
+                                info={{
+                                  isNonWorkingDay: row.isNonWorkingDay,
+                                  type: row.nonWorkingDayType,
+                                  label: row.dayInfo,
+                                }}
+                                compact
+                              />
+                            ) : null}
                           </TableCell>
                           <TableCell>{row.timeIn}</TableCell>
                           <TableCell>{row.timeOut}</TableCell>

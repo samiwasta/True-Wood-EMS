@@ -9,12 +9,38 @@ export const getDayName = (date: Date): string => {
 
 export const isHoliday = (date: Date, holidays: Holiday[]): Holiday | null => {
   const dateStr = format(date, 'yyyy-MM-dd')
-  return holidays.find(h => {
-    const start = new Date(h.start_date)
-    const end = new Date(h.end_date)
-    const checkDate = new Date(dateStr)
-    return checkDate >= start && checkDate <= end
-  }) || null
+  return holidays.find((h) => dateStr >= h.start_date && dateStr <= h.end_date) || null
+}
+
+export type NonWorkingDayInfo = {
+  isNonWorkingDay: boolean
+  type: 'holiday' | 'weekoff' | null
+  label: string
+}
+
+/** Days when all worked hours count as holiday/week-off overtime (no regular working hours). */
+export function getNonWorkingDayInfo(
+  date: Date | string,
+  holidays: Holiday[],
+  weeklyOff: WeeklyOff[] = []
+): NonWorkingDayInfo {
+  const dateObj = typeof date === 'string' ? new Date(date + 'T12:00:00') : date
+  const holiday = isHoliday(dateObj, holidays)
+  if (holiday) {
+    return {
+      isNonWorkingDay: true,
+      type: 'holiday',
+      label: holiday.name || holiday.title || 'Holiday',
+    }
+  }
+  if (isWeeklyOff(dateObj, weeklyOff)) {
+    return {
+      isNonWorkingDay: true,
+      type: 'weekoff',
+      label: 'Week Off',
+    }
+  }
+  return { isNonWorkingDay: false, type: null, label: '' }
 }
 
 export const isWeeklyOff = (date: Date, weeklyOff: WeeklyOff[]): boolean => {
