@@ -50,6 +50,8 @@ export function UpcomingLeaves() {
                 </p>
                 <p className="text-xs text-gray-500">
                   {formatDate(leave.start_date)} - {formatDate(leave.end_date)}
+                  <span className="mx-1.5 text-gray-300">·</span>
+                  {leave.total_days} {leave.total_days === 1 ? 'Day' : 'Days'}
                 </p>
               </div>
               <span className="text-xs px-2 py-1 rounded-full bg-orange-100 text-orange-700">

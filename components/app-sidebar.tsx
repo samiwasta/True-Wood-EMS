@@ -1,6 +1,6 @@
 "use client"
 
-import { LayoutDashboard, Users, CalendarCheck, Clock, FileText, Building2, Settings, Building } from "lucide-react"
+import { LayoutDashboard, Users, CalendarCheck, Clock, FileText, Building2, Package, Settings, Building } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 
@@ -47,6 +47,11 @@ const items = [
     title: "Work Sites",
     url: "/work-sites",
     icon: Building2,
+  },
+  {
+    title: "Inventory",
+    url: "/inventory",
+    icon: Package,
   },
   {
     title: "Settings",

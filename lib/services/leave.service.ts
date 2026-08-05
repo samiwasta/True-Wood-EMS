@@ -1,3 +1,4 @@
+import { addDays, format, parseISO } from 'date-fns'
 import { supabase } from '@/lib/supabase'
 
 export interface EmployeeLeaveBalance {
@@ -9,11 +10,76 @@ export interface EmployeeLeaveBalance {
   is_paid: boolean | null
 }
 
+type AttendanceLeaveRecord = {
+  id: string
+  date: string
+  employee_id: string
+  leave_type_id: string | null
+  employees: { id: string; name: string; employee_id?: string } | { id: string; name: string; employee_id?: string }[] | null
+  leave_types: { id: string; name: string } | { id: string; name: string }[] | null
+}
+
+type GroupedUpcomingLeave = {
+  id: string
+  start_date: string
+  end_date: string
+  employee_id: string
+  leave_type_id: string | null
+  employee_name: string
+  employee: { id: string; name: string; employee_id?: string } | null
+  type: string
+  total_days: number
+}
+
+function isNextCalendarDay(previousDate: string, nextDate: string): boolean {
+  return format(addDays(parseISO(previousDate), 1), 'yyyy-MM-dd') === nextDate
+}
+
+function groupConsecutiveLeaveDays(records: AttendanceLeaveRecord[]): GroupedUpcomingLeave[] {
+  const openGroups = new Map<string, GroupedUpcomingLeave>()
+  const groupedLeaves: GroupedUpcomingLeave[] = []
+
+  for (const record of records) {
+    const employee = Array.isArray(record.employees) ? record.employees[0] : record.employees
+    const leaveType = Array.isArray(record.leave_types) ? record.leave_types[0] : record.leave_types
+    const groupKey = `${record.employee_id}:${record.leave_type_id ?? 'none'}`
+    const openGroup = openGroups.get(groupKey)
+
+    if (openGroup && isNextCalendarDay(openGroup.end_date, record.date)) {
+      openGroup.end_date = record.date
+      openGroup.total_days += 1
+      continue
+    }
+
+    const newGroup: GroupedUpcomingLeave = {
+      id: record.id,
+      start_date: record.date,
+      end_date: record.date,
+      employee_id: record.employee_id,
+      leave_type_id: record.leave_type_id,
+      employee_name: employee?.name || 'Unknown',
+      employee: employee,
+      type: leaveType?.name || 'Leave',
+      total_days: 1,
+    }
+
+    openGroups.set(groupKey, newGroup)
+    groupedLeaves.push(newGroup)
+  }
+
+  return groupedLeaves.sort((a, b) => {
+    if (a.start_date === b.start_date) {
+      return a.employee_name.localeCompare(b.employee_name)
+    }
+    return a.start_date.localeCompare(b.start_date)
+  })
+}
+
 export class LeaveService {
   static async getUpcomingLeaves(limit: number = 5) {
     try {
       const today = new Date().toISOString().split('T')[0]
-      
+
       const { data, error } = await supabase
         .from('attendance_records')
         .select(`
@@ -27,39 +93,18 @@ export class LeaveService {
         .eq('status', 'leave')
         .gte('date', today)
         .order('date', { ascending: true })
-        .limit(limit)
+        .limit(Math.max(limit * 30, 150))
 
       if (error) {
         console.error('Error fetching upcoming leaves:', error)
         throw error
       }
 
-      if (!data) {
+      if (!data || data.length === 0) {
         return []
       }
 
-      return data.map((record: {
-        id: string
-        date: string
-        employee_id: string
-        leave_type_id: string | null
-        employees: { id: string; name: string; employee_id?: string } | { id: string; name: string; employee_id?: string }[] | null
-        leave_types: { id: string; name: string } | { id: string; name: string }[] | null
-      }) => {
-        const employee = Array.isArray(record.employees) ? record.employees[0] : record.employees
-        const leaveType = Array.isArray(record.leave_types) ? record.leave_types[0] : record.leave_types
-        
-        return {
-          id: record.id,
-          start_date: record.date,
-          end_date: record.date,
-          employee_id: record.employee_id,
-          leave_type_id: record.leave_type_id,
-          employee_name: employee?.name || 'Unknown',
-          employee: employee,
-          type: leaveType?.name || 'Leave',
-        }
-      })
+      return groupConsecutiveLeaveDays(data as AttendanceLeaveRecord[]).slice(0, limit)
     } catch (error) {
       console.error('Error fetching upcoming leaves:', error)
       throw error

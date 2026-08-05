@@ -12,6 +12,7 @@ export interface UpcomingLeave {
   employee_name: string
   employee: Partial<Employee> | null
   type: string
+  total_days: number
 }
 
 export function useUpcomingLeaves(limit: number = 5) {
