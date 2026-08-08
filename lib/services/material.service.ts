@@ -4,6 +4,10 @@ import { Material } from '@/lib/models/inventory.model'
 const PHOTO_BUCKET = 'material-photos'
 const MAX_PHOTO_BYTES = 5 * 1024 * 1024
 const ALLOWED_PHOTO_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
+const MATERIAL_SELECT = `
+  *,
+  category:material_categories(id, name)
+`
 
 function getExtension(file: File): string {
   const fromName = file.name.split('.').pop()?.toLowerCase()
@@ -21,12 +25,17 @@ function storagePathFromPublicUrl(photoUrl: string): string | null {
   return decodeURIComponent(photoUrl.slice(index + marker.length))
 }
 
+function normalizeMaterial(data: Material): Material {
+  const category = Array.isArray(data.category) ? data.category[0] : data.category
+  return { ...data, category: category ?? null }
+}
+
 export class MaterialService {
   static async getAll(): Promise<Material[]> {
     try {
       const { data, error } = await supabase
         .from('materials')
-        .select('*')
+        .select(MATERIAL_SELECT)
         .order('name', { ascending: true })
 
       if (error) {
@@ -34,7 +43,7 @@ export class MaterialService {
         throw new Error(error.message || 'Failed to fetch materials')
       }
 
-      return data ?? []
+      return (data ?? []).map((item) => normalizeMaterial(item as Material))
     } catch (error) {
       console.error('Error fetching materials:', error)
       throw error instanceof Error ? error : new Error('Failed to fetch materials')
@@ -91,6 +100,7 @@ export class MaterialService {
     name: string
     unit?: string
     description?: string
+    category_id?: string | null
     photoFile?: File | null
   }): Promise<Material> {
     try {
@@ -98,9 +108,13 @@ export class MaterialService {
       if (!trimmedName) {
         throw new Error('Material name is required')
       }
+      if (!input.category_id) {
+        throw new Error('Category is required')
+      }
 
       const payload: Record<string, unknown> = {
         name: trimmedName,
+        category_id: input.category_id,
         is_active: true,
       }
 
@@ -115,7 +129,7 @@ export class MaterialService {
       const { data, error } = await supabase
         .from('materials')
         .insert(payload)
-        .select()
+        .select(MATERIAL_SELECT)
         .single()
 
       if (error) {
@@ -123,17 +137,19 @@ export class MaterialService {
         throw new Error(error.message || error.details || 'Failed to create material')
       }
 
+      const material = normalizeMaterial(data as Material)
+
       if (!input.photoFile) {
-        return data
+        return material
       }
 
       try {
-        const photoUrl = await this.uploadPhoto(data.id, input.photoFile)
+        const photoUrl = await this.uploadPhoto(material.id, input.photoFile)
         const { data: updated, error: updateError } = await supabase
           .from('materials')
           .update({ photo_url: photoUrl })
-          .eq('id', data.id)
-          .select()
+          .eq('id', material.id)
+          .select(MATERIAL_SELECT)
           .single()
 
         if (updateError) {
@@ -141,9 +157,9 @@ export class MaterialService {
           throw new Error(updateError.message || 'Failed to save photo')
         }
 
-        return updated
+        return normalizeMaterial(updated as Material)
       } catch (photoError) {
-        await supabase.from('materials').delete().eq('id', data.id)
+        await supabase.from('materials').delete().eq('id', material.id)
         throw photoError
       }
     } catch (error) {
@@ -158,6 +174,7 @@ export class MaterialService {
       name: string
       unit?: string | null
       description?: string | null
+      category_id?: string | null
       is_active?: boolean
       photoFile?: File | null
       removePhoto?: boolean
@@ -171,6 +188,9 @@ export class MaterialService {
       const trimmedName = input.name.trim()
       if (!trimmedName) {
         throw new Error('Material name is required')
+      }
+      if (input.category_id !== undefined && !input.category_id) {
+        throw new Error('Category is required')
       }
 
       const { data: existing, error: existingError } = await supabase
@@ -195,6 +215,10 @@ export class MaterialService {
         payload.description = input.description?.trim() || null
       }
 
+      if (input.category_id !== undefined) {
+        payload.category_id = input.category_id
+      }
+
       if (input.is_active !== undefined) {
         payload.is_active = input.is_active
       }
@@ -212,7 +236,7 @@ export class MaterialService {
         .from('materials')
         .update(payload)
         .eq('id', id)
-        .select()
+        .select(MATERIAL_SELECT)
         .single()
 
       if (error) {
@@ -220,7 +244,7 @@ export class MaterialService {
         throw new Error(error.message || error.details || 'Failed to update material')
       }
 
-      return data
+      return normalizeMaterial(data as Material)
     } catch (error) {
       if (error instanceof Error) throw error
       throw new Error('Failed to update material')

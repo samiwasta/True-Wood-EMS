@@ -30,6 +30,7 @@ export function useMaterials() {
       name: string
       unit?: string
       description?: string
+      category_id?: string | null
       photoFile?: File | null
     }) => {
       const created = await MaterialService.create(input)
@@ -46,6 +47,7 @@ export function useMaterials() {
         name: string
         unit?: string | null
         description?: string | null
+        category_id?: string | null
         is_active?: boolean
         photoFile?: File | null
         removePhoto?: boolean

@@ -3,6 +3,8 @@ import {
   VendorMaterial,
   VendorMaterialInput,
   VendorPriceBreakdown,
+  VendorPriceSearchOptions,
+  VendorPriceSortBy,
 } from '@/lib/models/inventory.model'
 
 function toNumber(value: unknown, fallback = 0): number {
@@ -11,7 +13,24 @@ function toNumber(value: unknown, fallback = 0): number {
 }
 
 function computeBreakdown(
-  row: VendorMaterial,
+  row: VendorMaterial & {
+    vendor?: {
+      id?: string
+      name?: string
+      contact_name?: string | null
+      phone?: string | null
+      is_active?: boolean
+    } | null
+    material?: {
+      id?: string
+      name?: string
+      unit?: string | null
+      photo_url?: string | null
+      category_id?: string | null
+      is_active?: boolean
+      category?: { id?: string; name?: string } | { id?: string; name?: string }[] | null
+    } | null
+  },
   quantity: number
 ): VendorPriceBreakdown {
   const unitPrice = toNumber(row.unit_price)
@@ -23,15 +42,23 @@ function computeBreakdown(
 
   const vendor = Array.isArray(row.vendor) ? row.vendor[0] : row.vendor
   const material = Array.isArray(row.material) ? row.material[0] : row.material
+  const category = material?.category
+    ? Array.isArray(material.category)
+      ? material.category[0]
+      : material.category
+    : null
 
   return {
     vendor_material_id: row.id,
     vendor_id: row.vendor_id,
     vendor_name: vendor?.name || 'Unknown Vendor',
+    vendor_contact_name: vendor?.contact_name ?? null,
+    vendor_phone: vendor?.phone ?? null,
     material_id: row.material_id,
     material_name: material?.name || 'Unknown Material',
     material_unit: material?.unit ?? null,
     material_photo_url: material?.photo_url ?? null,
+    material_category_name: category?.name ?? null,
     quantity,
     unit_price: unitPrice,
     gst_percent: gstPercent,
@@ -39,6 +66,34 @@ function computeBreakdown(
     subtotal,
     gst_amount: gstAmount,
     total,
+    effective_unit_price: quantity > 0 ? total / quantity : total,
+  }
+}
+
+function sortBreakdowns(
+  rows: VendorPriceBreakdown[],
+  sortBy: VendorPriceSortBy = 'total_asc'
+): VendorPriceBreakdown[] {
+  const sorted = [...rows]
+  switch (sortBy) {
+    case 'total_desc':
+      return sorted.sort((a, b) => b.total - a.total || a.vendor_name.localeCompare(b.vendor_name))
+    case 'unit_price_asc':
+      return sorted.sort(
+        (a, b) => a.unit_price - b.unit_price || a.total - b.total || a.vendor_name.localeCompare(b.vendor_name)
+      )
+    case 'transport_asc':
+      return sorted.sort(
+        (a, b) =>
+          a.transportation_cost - b.transportation_cost ||
+          a.total - b.total ||
+          a.vendor_name.localeCompare(b.vendor_name)
+      )
+    case 'vendor_asc':
+      return sorted.sort((a, b) => a.vendor_name.localeCompare(b.vendor_name) || a.total - b.total)
+    case 'total_asc':
+    default:
+      return sorted.sort((a, b) => a.total - b.total || a.vendor_name.localeCompare(b.vendor_name))
   }
 }
 
@@ -50,7 +105,7 @@ export class VendorMaterialService {
         .select(`
           *,
           vendor:vendors(id, name, contact_name, phone),
-          material:materials(id, name, unit, photo_url)
+          material:materials(id, name, unit, photo_url, category_id)
         `)
         .order('created_at', { ascending: false })
 
@@ -100,7 +155,7 @@ export class VendorMaterialService {
         .select(`
           *,
           vendor:vendors(id, name, contact_name, phone),
-          material:materials(id, name, unit, photo_url)
+          material:materials(id, name, unit, photo_url, category_id)
         `)
         .single()
 
@@ -168,7 +223,7 @@ export class VendorMaterialService {
         .select(`
           *,
           vendor:vendors(id, name, contact_name, phone),
-          material:materials(id, name, unit, photo_url)
+          material:materials(id, name, unit, photo_url, category_id)
         `)
         .single()
 
@@ -208,23 +263,45 @@ export class VendorMaterialService {
   }
 
   static async searchByMaterial(
-    materialName: string,
-    quantity: number
+    materialNameOrOptions: string | VendorPriceSearchOptions,
+    quantityArg?: number
   ): Promise<VendorPriceBreakdown[]> {
     try {
-      const trimmedName = materialName.trim()
-      if (!trimmedName) {
-        throw new Error('Material name is required')
-      }
+      const options: VendorPriceSearchOptions =
+        typeof materialNameOrOptions === 'string'
+          ? {
+              materialName: materialNameOrOptions,
+              quantity: quantityArg ?? 0,
+              sortBy: 'total_asc',
+            }
+          : materialNameOrOptions
+
+      const quantity = options.quantity
       if (!Number.isFinite(quantity) || quantity <= 0) {
         throw new Error('Quantity must be greater than zero')
       }
 
-      const { data: materials, error: materialsError } = await supabase
+      if (!options.materialId && !options.materialName?.trim() && !options.categoryId) {
+        throw new Error('Select a material, category, or enter a material name')
+      }
+
+      let materialQuery = supabase
         .from('materials')
         .select('id')
-        .ilike('name', `%${trimmedName}%`)
         .eq('is_active', true)
+
+      if (options.materialId) {
+        materialQuery = materialQuery.eq('id', options.materialId)
+      } else {
+        if (options.materialName?.trim()) {
+          materialQuery = materialQuery.ilike('name', `%${options.materialName.trim()}%`)
+        }
+        if (options.categoryId) {
+          materialQuery = materialQuery.eq('category_id', options.categoryId)
+        }
+      }
+
+      const { data: materials, error: materialsError } = await materialQuery
 
       if (materialsError) {
         console.error('Error searching materials:', materialsError)
@@ -242,7 +319,15 @@ export class VendorMaterialService {
         .select(`
           *,
           vendor:vendors(id, name, contact_name, phone, is_active),
-          material:materials(id, name, unit, photo_url, is_active)
+          material:materials(
+            id,
+            name,
+            unit,
+            photo_url,
+            category_id,
+            is_active,
+            category:material_categories(id, name)
+          )
         `)
         .in('material_id', materialIds)
         .eq('is_active', true)
@@ -254,20 +339,21 @@ export class VendorMaterialService {
 
       const rows = (data ?? []) as VendorMaterial[]
 
-      return rows
+      const breakdowns = rows
         .filter((row) => {
           const vendor = (Array.isArray(row.vendor) ? row.vendor[0] : row.vendor) as
-            | { name?: string; is_active?: boolean }
+            | { is_active?: boolean }
             | null
             | undefined
           const material = (Array.isArray(row.material) ? row.material[0] : row.material) as
-            | { name?: string; is_active?: boolean }
+            | { is_active?: boolean }
             | null
             | undefined
           return vendor?.is_active !== false && material?.is_active !== false
         })
         .map((row) => computeBreakdown(row, quantity))
-        .sort((a, b) => a.total - b.total)
+
+      return sortBreakdowns(breakdowns, options.sortBy || 'total_asc')
     } catch (error) {
       if (error instanceof Error) throw error
       throw new Error('Failed to search vendor prices')

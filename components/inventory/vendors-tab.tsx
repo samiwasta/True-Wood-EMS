@@ -1,9 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useVendors } from '@/lib/hooks/useVendors'
 import { Vendor } from '@/lib/models/inventory.model'
-import { Building2, Plus, Edit2, Trash2, AlertTriangle } from 'lucide-react'
+import { Building2, Plus, Edit2, Trash2, AlertTriangle, Search } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -28,6 +28,7 @@ const emptyForm = {
 export function VendorsTab() {
   const { vendors, loading, createVendor, updateVendor, deleteVendor } = useVendors()
 
+  const [searchQuery, setSearchQuery] = useState('')
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
@@ -36,7 +37,36 @@ export function VendorsTab() {
   const [deletingVendor, setDeletingVendor] = useState<Vendor | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
+  const filteredVendors = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase()
+    if (!query) return vendors
+    return vendors.filter((vendor) => {
+      return (
+        vendor.name.toLowerCase().includes(query) ||
+        (vendor.contact_name || '').toLowerCase().includes(query) ||
+        (vendor.phone || '').toLowerCase().includes(query) ||
+        (vendor.email || '').toLowerCase().includes(query) ||
+        (vendor.address || '').toLowerCase().includes(query)
+      )
+    })
+  }, [vendors, searchQuery])
+
   const resetForm = () => setForm(emptyForm)
+
+  const toggleActive = async (vendor: Vendor) => {
+    try {
+      await updateVendor(vendor.id, {
+        name: vendor.name,
+        contact_name: vendor.contact_name,
+        phone: vendor.phone,
+        email: vendor.email,
+        address: vendor.address,
+        is_active: vendor.is_active === false,
+      })
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Failed to update vendor status')
+    }
+  }
 
   const handleAddSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -178,14 +208,28 @@ export function VendorsTab() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <Building2 className="h-5 w-5 text-[#23887C]" />
           <h3 className="text-lg font-semibold text-gray-900">Vendors</h3>
           {!loading && vendors.length > 0 && (
-            <span className="text-sm text-gray-500">({vendors.length})</span>
+            <span className="text-sm text-gray-500">
+              ({filteredVendors.length}
+              {filteredVendors.length !== vendors.length ? ` of ${vendors.length}` : ''})
+            </span>
           )}
         </div>
+        <div className="flex items-center gap-2">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <Input
+              type="text"
+              placeholder="Search vendors..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9 h-10 w-52 border-gray-300"
+            />
+          </div>
         <Dialog
           open={isAddDialogOpen}
           onOpenChange={(open) => {
@@ -221,6 +265,7 @@ export function VendorsTab() {
             </form>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       {loading ? (
@@ -229,25 +274,36 @@ export function VendorsTab() {
             <Skeleton key={i} className="h-16 w-full rounded-lg" />
           ))}
         </div>
-      ) : vendors.length === 0 ? (
+      ) : filteredVendors.length === 0 ? (
         <div className="text-center py-12 border-2 border-dashed border-gray-200 rounded-lg">
           <Building2 className="h-12 w-12 text-gray-400 mx-auto mb-3" />
           <p className="text-gray-500 font-medium">No vendors found</p>
-          <p className="text-sm text-gray-400 mt-1">Add your first vendor to get started</p>
+          <p className="text-sm text-gray-400 mt-1">
+            {vendors.length === 0 ? 'Add your first vendor to get started' : 'Try a different search'}
+          </p>
         </div>
       ) : (
         <div className="space-y-3">
-          {vendors.map((vendor) => (
+          {filteredVendors.map((vendor) => (
             <div
               key={vendor.id}
-              className="flex items-center justify-between p-4 bg-white border border-gray-200 rounded-lg hover:border-[#23887C]/30 hover:shadow-sm transition-all"
+              className={`flex items-center justify-between p-4 bg-white border border-gray-200 rounded-lg hover:border-[#23887C]/30 hover:shadow-sm transition-all ${
+                vendor.is_active === false ? 'opacity-70' : ''
+              }`}
             >
               <div className="flex items-start gap-3 flex-1 min-w-0">
                 <div className="p-2 bg-[#23887C]/10 rounded-lg">
                   <Building2 className="h-4 w-4 text-[#23887C]" />
                 </div>
                 <div className="min-w-0">
-                  <p className="font-semibold text-gray-900">{vendor.name}</p>
+                  <div className="flex items-center gap-2">
+                    <p className="font-semibold text-gray-900">{vendor.name}</p>
+                    {vendor.is_active === false && (
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
+                        Inactive
+                      </span>
+                    )}
+                  </div>
                   <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1 text-sm text-gray-500">
                     {vendor.contact_name && <span>{vendor.contact_name}</span>}
                     {vendor.phone && <span>{vendor.phone}</span>}
@@ -259,6 +315,14 @@ export function VendorsTab() {
                 </div>
               </div>
               <div className="flex items-center gap-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 text-xs text-gray-600"
+                  onClick={() => toggleActive(vendor)}
+                >
+                  {vendor.is_active === false ? 'Activate' : 'Deactivate'}
+                </Button>
                 <Button
                   variant="ghost"
                   size="icon-sm"

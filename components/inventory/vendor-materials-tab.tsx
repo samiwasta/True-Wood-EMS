@@ -5,7 +5,7 @@ import { useVendorMaterials } from '@/lib/hooks/useVendorMaterials'
 import { useMaterials } from '@/lib/hooks/useMaterials'
 import { useVendors } from '@/lib/hooks/useVendors'
 import { VendorMaterial } from '@/lib/models/inventory.model'
-import { formatINR, getMaterialUnitLabel } from '@/lib/utils/inventory.utils'
+import { formatINR, getMaterialUnitLabel, resolveRelation } from '@/lib/utils/inventory.utils'
 import { Link2, Plus, Edit2, Trash2, AlertTriangle } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Button } from '@/components/ui/button'
@@ -41,11 +41,6 @@ const emptyForm = {
   unit_price: '',
   gst_percent: '0',
   transportation_cost: '0',
-}
-
-function resolveRelation<T>(value: T | T[] | null | undefined): T | null {
-  if (!value) return null
-  return Array.isArray(value) ? value[0] ?? null : value
 }
 
 export function VendorMaterialsTab() {

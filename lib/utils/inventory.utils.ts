@@ -35,3 +35,16 @@ export function getMaterialUnitLabel(unit: string | null | undefined): string {
   const match = MATERIAL_UNITS.find((item) => item.value === unit)
   return match?.label ?? unit
 }
+
+export function resolveRelation<T>(value: T | T[] | null | undefined): T | null {
+  if (!value) return null
+  return Array.isArray(value) ? value[0] ?? null : value
+}
+
+export const VENDOR_PRICE_SORT_OPTIONS = [
+  { value: 'total_asc', label: 'Total: Low to High' },
+  { value: 'total_desc', label: 'Total: High to Low' },
+  { value: 'unit_price_asc', label: 'Unit Price: Low to High' },
+  { value: 'transport_asc', label: 'Transport: Low to High' },
+  { value: 'vendor_asc', label: 'Vendor Name: A to Z' },
+] as const
