@@ -1,6 +1,7 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { VendorMaterialService } from '@/lib/services/vendor-material.service'
 import { useMaterials } from '@/lib/hooks/useMaterials'
 import { useDebounce } from '@/lib/hooks/useDebounce'
@@ -24,6 +25,12 @@ import {
   TableRow,
 } from '@/components/ui/table'
 
+type SuggestionPosition = {
+  top: number
+  left: number
+  width: number
+}
+
 export function InventorySearch() {
   const { materials } = useMaterials()
 
@@ -35,10 +42,16 @@ export function InventorySearch() {
   const [error, setError] = useState<string | null>(null)
   const [showSuggestions, setShowSuggestions] = useState(false)
   const [highlightedIndex, setHighlightedIndex] = useState(-1)
+  const [suggestionPosition, setSuggestionPosition] = useState<SuggestionPosition | null>(null)
+  const [isMounted, setIsMounted] = useState(false)
 
   const inputRef = useRef<HTMLInputElement>(null)
   const suggestionsRef = useRef<HTMLDivElement>(null)
   const debouncedQuery = useDebounce(materialName, 300)
+
+  useEffect(() => {
+    setIsMounted(true)
+  }, [])
 
   const activeMaterials = useMemo(
     () => materials.filter((material) => material.is_active !== false),
@@ -63,6 +76,36 @@ export function InventorySearch() {
   useEffect(() => {
     setHighlightedIndex(-1)
   }, [suggestions])
+
+  const updateSuggestionPosition = useCallback(() => {
+    const input = inputRef.current
+    if (!input) return
+
+    const rect = input.getBoundingClientRect()
+    setSuggestionPosition({
+      top: rect.bottom + 4,
+      left: rect.left,
+      width: rect.width,
+    })
+  }, [])
+
+  useLayoutEffect(() => {
+    if (!showSuggestions || materialName.trim().length === 0) {
+      setSuggestionPosition(null)
+      return
+    }
+
+    updateSuggestionPosition()
+
+    const handleReposition = () => updateSuggestionPosition()
+    window.addEventListener('resize', handleReposition)
+    window.addEventListener('scroll', handleReposition, true)
+
+    return () => {
+      window.removeEventListener('resize', handleReposition)
+      window.removeEventListener('scroll', handleReposition, true)
+    }
+  }, [showSuggestions, materialName, suggestions.length, updateSuggestionPosition])
 
   const summary = useMemo(() => {
     if (results.length === 0) return null
@@ -185,12 +228,81 @@ export function InventorySearch() {
   }, [])
 
   const lowestTotal = summary?.lowest
+  const showSuggestionPanel =
+    showSuggestions && materialName.trim().length > 0 && suggestionPosition !== null
+
+  const suggestionPanel =
+    isMounted &&
+    showSuggestionPanel &&
+    suggestionPosition &&
+    createPortal(
+      <div
+        ref={suggestionsRef}
+        style={{
+          position: 'fixed',
+          top: suggestionPosition.top,
+          left: suggestionPosition.left,
+          width: suggestionPosition.width,
+        }}
+        className="z-[100] rounded-lg border border-gray-200 bg-white shadow-lg overflow-hidden"
+      >
+        {suggestions.length === 0 ? (
+          <div className="px-3 py-2.5 text-sm text-gray-500 h-10 flex items-center">
+            {debouncedQuery.trim() !== materialName.trim()
+              ? 'Searching...'
+              : 'No matching materials'}
+          </div>
+        ) : (
+          <ul className="max-h-64 overflow-y-auto py-1 overscroll-contain">
+            {suggestions.map((material, index) => {
+              const category = resolveRelation(material.category)
+              return (
+                <li key={material.id}>
+                  <button
+                    type="button"
+                    className={`w-full text-left px-3 py-2.5 flex items-center gap-3 transition-colors ${
+                      index === highlightedIndex ? 'bg-[#23887C]/10' : 'hover:bg-gray-50'
+                    }`}
+                    onMouseEnter={() => setHighlightedIndex(index)}
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => selectSuggestion(material)}
+                  >
+                    <div className="h-9 w-9 rounded-md bg-gray-100 overflow-hidden flex items-center justify-center flex-shrink-0">
+                      {material.photo_url ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={material.photo_url}
+                          alt={material.name}
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <Search className="h-4 w-4 text-gray-400" />
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-gray-900 truncate">
+                        {material.name}
+                      </p>
+                      <p className="text-xs text-gray-500 truncate">
+                        {category?.name ? `${category.name} · ` : ''}
+                        {material.unit ? getMaterialUnitLabel(material.unit) : 'No unit'}
+                      </p>
+                    </div>
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
+        )}
+      </div>,
+      document.body
+    )
 
   return (
     <div className="space-y-6">
       <form onSubmit={handleSearch} className="space-y-4">
-        <div className="grid grid-cols-1 sm:grid-cols-[1fr_140px_auto] gap-3 items-end">
-          <div className="space-y-2 relative">
+        <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_140px_auto] gap-3 items-end">
+          <div className="space-y-2 min-w-0">
             <label htmlFor="material-name" className="text-sm font-medium text-gray-700 block">
               Material Name
             </label>
@@ -203,73 +315,17 @@ export function InventorySearch() {
               onChange={(e) => {
                 setMaterialName(e.target.value)
                 setShowSuggestions(true)
-                setError(null)
+                if (error) setError(null)
               }}
-              onFocus={() => setShowSuggestions(true)}
+              onFocus={() => {
+                setShowSuggestions(true)
+                updateSuggestionPosition()
+              }}
               onKeyDown={handleKeyDown}
               autoComplete="off"
               className="h-11 border-gray-300 focus:border-[#23887C] focus:ring-[#23887C] focus:ring-1"
               disabled={loading}
             />
-
-            {showSuggestions && materialName.trim().length > 0 && (
-              <div
-                ref={suggestionsRef}
-                className="absolute z-20 mt-1 w-full rounded-lg border border-gray-200 bg-white shadow-lg overflow-hidden"
-              >
-                {suggestions.length === 0 ? (
-                  <div className="px-3 py-2.5 text-sm text-gray-500">
-                    {debouncedQuery.trim() !== materialName.trim()
-                      ? 'Searching...'
-                      : 'No matching materials'}
-                  </div>
-                ) : (
-                  <ul className="max-h-64 overflow-y-auto py-1">
-                    {suggestions.map((material, index) => {
-                      const category = resolveRelation(material.category)
-                      return (
-                        <li key={material.id}>
-                          <button
-                            type="button"
-                            className={`w-full text-left px-3 py-2.5 flex items-center gap-3 transition-colors ${
-                              index === highlightedIndex
-                                ? 'bg-[#23887C]/10'
-                                : 'hover:bg-gray-50'
-                            }`}
-                            onMouseEnter={() => setHighlightedIndex(index)}
-                            onClick={() => selectSuggestion(material)}
-                          >
-                            <div className="h-9 w-9 rounded-md bg-gray-100 overflow-hidden flex items-center justify-center flex-shrink-0">
-                              {material.photo_url ? (
-                                // eslint-disable-next-line @next/next/no-img-element
-                                <img
-                                  src={material.photo_url}
-                                  alt={material.name}
-                                  className="h-full w-full object-cover"
-                                />
-                              ) : (
-                                <Search className="h-4 w-4 text-gray-400" />
-                              )}
-                            </div>
-                            <div className="min-w-0">
-                              <p className="text-sm font-medium text-gray-900 truncate">
-                                {material.name}
-                              </p>
-                              <p className="text-xs text-gray-500 truncate">
-                                {category?.name ? `${category.name} · ` : ''}
-                                {material.unit
-                                  ? getMaterialUnitLabel(material.unit)
-                                  : 'No unit'}
-                              </p>
-                            </div>
-                          </button>
-                        </li>
-                      )
-                    })}
-                  </ul>
-                )}
-              </div>
-            )}
           </div>
 
           <div className="space-y-2">
@@ -298,8 +354,9 @@ export function InventorySearch() {
             {loading ? 'Searching...' : 'Compare Vendors'}
           </Button>
         </div>
-        {error && <p className="text-sm text-red-600">{error}</p>}
+        <p className="text-sm text-red-600 min-h-5">{error || '\u00A0'}</p>
       </form>
+      {suggestionPanel}
 
       {loading ? (
         <div className="space-y-3">
