@@ -32,7 +32,6 @@ A modern Employee Management System for True Wood, built with Next.js, Supabase,
 - Short names and site history support
 
 ### Inventory (password protected)
-Password: `TW-IS-001`
 
 - **Compare** — search materials by name with debounced suggestions; compare vendor quotes sorted by lowest total
 - **Items** — materials with photo, unit, category, activate/deactivate
